@@ -66,6 +66,7 @@ The following settings are required to connect to the API.
 <br>
 - The connector first verifies whether the employee exists. However, this process can vary between instances, depending on whether auto-numbering is enabled. For more information about correlation, please refer to the [Employee Connector remarks](https://github.com/Tools4everBV/HelloID-Conn-Prov-Target-Ultimo-Employee#remarks). The current implementation in the connector assumes that auto-numbering is disabled and that the 'Id' property contains the employee number. If your implementation differs from this, please follow the correlation method described in the employee connector README.
 *Current implementation of the Employee Correlation method:*
+  
   ```Powershell
     $spaltInvoke = @{
         uri    = "$($config.BaseUrl)/api/v1/object/Employee('$($account.EmployeeId)')"
