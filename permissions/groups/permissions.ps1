@@ -1,24 +1,10 @@
-########################################################
-# HelloID-Conn-Prov-Target-Ultimo-User-Entitlement-Grant
-#
-# Version: 1.0.0
-########################################################
-# Initialize default values
-$config = $configuration | ConvertFrom-Json
-$p = $person | ConvertFrom-Json
-$aRef = $AccountReference | ConvertFrom-Json
-$pRef = $permissionReference | ConvertFrom-Json
-$success = $false
-$auditLogs = [System.Collections.Generic.List[PSCustomObject]]::new()
+############################################################
+# HelloID-Conn-Prov-Target-Ultimo-User-Permissions-Group
+# PowerShell V2
+############################################################
 
 # Enable TLS1.2
 [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor [System.Net.SecurityProtocolType]::Tls12
-
-# Set debug logging
-switch ($($config.IsDebug)) {
-    $true { $VerbosePreference = 'Continue' }
-    $false { $VerbosePreference = 'SilentlyContinue' }
-}
 
 #region functions
 function Invoke-UltimoUserRestMethod {
@@ -43,8 +29,8 @@ function Invoke-UltimoUserRestMethod {
     process {
         try {
             $headers = @{
-                APIKey               = $config.APIKey
-                ApplicationElementId = $config.ApplicationElementId
+                APIKey               = $actionContext.Configuration.APIKey
+                ApplicationElementId = $actionContext.Configuration.ApplicationElementId
             }
             $splatParams = @{
                 Uri         = $Uri
@@ -53,7 +39,6 @@ function Invoke-UltimoUserRestMethod {
                 ContentType = $ContentType
             }
             if ($Body) {
-                Write-Verbose 'Adding body to request'
                 $splatParams['Body'] = $Body
             }
             $response = Invoke-RestMethod @splatParams -Verbose:$false
@@ -107,65 +92,31 @@ function Resolve-Ultimo-UserError {
 }
 #endregion
 
-# Begin
 try {
-    # Verify if [aRef] has a value
-    if ([string]::IsNullOrEmpty($($aRef))) {
-        throw 'The account reference could not be found'
-    }
-
-    Write-Verbose "Verifying if a Ultimo-User account for [$($p.DisplayName)] exists"
+    Write-Information 'Retrieving permissions'
     $splatInvoke = @{
-        uri    = "$($config.BaseUrl)/api/v1/action/_ExternalAuthorizationManagement"
+        uri    = "$($actionContext.Configuration.BaseUrl)/api/v1/action/_ExternalAuthorizationManagement"
         Method = 'POST'
         Body   = ( @{
-                Action = 'GetUser'
-                UserId = $aRef
+                Action = 'GetAllAuthorizationGroups'
             } | ConvertTo-Json)
     }
-    $currentUser = (Invoke-UltimoUserRestMethod @splatInvoke -Verbose:$false).properties.UserDetails
+    $retrievedPermissions = (Invoke-UltimoUserRestMethod  @splatInvoke -Verbose:$false).properties.AllAvailableAuthorizationGroups
 
-    # Add an auditMessage showing what will happen during enforcement
-    if ($dryRun -eq $true) {
-        Write-Warning "[DryRun] Grant Ultimo-User entitlement: [$($pRef.Reference)] to: [$($p.DisplayName)] will be executed during enforcement"
-    }
-
-    # Process
-    if (-not($dryRun -eq $true)) {
-        Write-Verbose "Granting Ultimo-User entitlement: [$($pRef.Reference)]"
-        if ($pref.reference -notin $currentUser.AuthorizationGroups.sgrousegroid) {
-            $splatInvoke['Body'] = @{
-                Action  = 'GrantAuthorizationGroup'
-                UserId  = $aRef
-                GroupId = $pRef.Reference
-            } | ConvertTo-Json
-            $null = (Invoke-UltimoUserRestMethod @splatInvoke -Verbose:$false)
-        } else {
-            Write-Verbose "Permissions [$($pref.reference)] already granted"
-        }
-
-        $success = $true
-        $auditLogs.Add([PSCustomObject]@{
-                Message = "Grant Ultimo-User entitlement: [$($pRef.Reference)] was successful"
-                IsError = $false
-            })
+    foreach ($permission in $retrievedPermissions) {
+        $outputContext.Permissions.Add(
+            @{
+                DisplayName    = $permission.GroupName
+                Identification = @{
+                    DisplayName = $permission.GroupName
+                    Reference   = $permission.GroupId
+                }
+            }
+        )
     }
 } catch {
-    $success = $false
     $ex = $PSItem
     $errorObj = Resolve-Ultimo-UserError -ErrorObject $ex
-    $auditMessage = "Could not grant Ultimo-User account. Error: $($errorObj.FriendlyMessage)"
-    Write-Verbose "Error at Line '$($errorObj.ScriptLineNumber)': $($errorObj.Line). Error: $($errorObj.ErrorDetails)"
-
-    $auditLogs.Add([PSCustomObject]@{
-            Message = $auditMessage
-            IsError = $true
-        })
-    # End
-} finally {
-    $result = [PSCustomObject]@{
-        Success   = $success
-        Auditlogs = $auditLogs
-    }
-    Write-Output $result | ConvertTo-Json -Depth 10
+    Write-Warning "Could not retrieve Ultimo-User permissions. Error: $($errorObj.FriendlyMessage)"
+    Write-Warning "Error at Line '$($errorObj.ScriptLineNumber)': $($errorObj.Line). Error: $($errorObj.ErrorDetails)"
 }

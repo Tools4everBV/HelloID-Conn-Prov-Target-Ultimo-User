@@ -1,24 +1,10 @@
-#########################################################
-# HelloID-Conn-Prov-Target-Ultimo-User-Entitlement-Revoke
-#
-# Version: 1.0.0
-#########################################################
-# Initialize default values
-$config = $configuration | ConvertFrom-Json
-$p = $person | ConvertFrom-Json
-$aRef = $AccountReference | ConvertFrom-Json
-$pRef = $permissionReference | ConvertFrom-Json
-$success = $false
-$auditLogs = [System.Collections.Generic.List[PSCustomObject]]::new()
+#################################################################
+# HelloID-Conn-Prov-Target-Ultimo-User-RevokePermission-Group
+# PowerShell V2
+#################################################################
 
 # Enable TLS1.2
 [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor [System.Net.SecurityProtocolType]::Tls12
-
-# Set debug logging
-switch ($($config.IsDebug)) {
-    $true { $VerbosePreference = 'Continue' }
-    $false { $VerbosePreference = 'SilentlyContinue' }
-}
 
 #region functions
 function Invoke-UltimoUserRestMethod {
@@ -43,8 +29,8 @@ function Invoke-UltimoUserRestMethod {
     process {
         try {
             $headers = @{
-                APIKey               = $config.APIKey
-                ApplicationElementId = $config.ApplicationElementId
+                APIKey               = $actionContext.Configuration.APIKey
+                ApplicationElementId = $actionContext.Configuration.ApplicationElementId
             }
             $splatParams = @{
                 Uri         = $Uri
@@ -53,7 +39,6 @@ function Invoke-UltimoUserRestMethod {
                 ContentType = $ContentType
             }
             if ($Body) {
-                Write-Verbose 'Adding body to request'
                 $splatParams['Body'] = $Body
             }
             $response = Invoke-RestMethod @splatParams -Verbose:$false
@@ -106,101 +91,83 @@ function Resolve-Ultimo-UserError {
     }
 }
 #endregion
-
 # Begin
 try {
     # Verify if [aRef] has a value
-    if ([string]::IsNullOrEmpty($($aRef))) {
+    if ([string]::IsNullOrEmpty($($actionContext.References.Account))) {
         throw 'The account reference could not be found'
     }
 
-
-    Write-Verbose "Verifying if a Ultimo-User account for [$($p.DisplayName)] exists"
+    Write-Information "Verifying if a Ultimo-User account for [$($personContext.Person.DisplayName)] exists"
     try {
         $splatInvoke = @{
-            uri    = "$($config.BaseUrl)/api/v1/action/_ExternalAuthorizationManagement"
+            uri    = "$($actionContext.Configuration.BaseUrl)/api/v1/action/_ExternalAuthorizationManagement"
             Method = 'POST'
             Body   = ( @{
                     Action = 'GetUser'
-                    UserId = $aRef
+                    UserId = $actionContext.References.Account
                 } | ConvertTo-Json)
         }
-        $currentUser = (Invoke-UltimoUserRestMethod @splatInvoke -Verbose:$false).properties.UserDetails
-        $userFound = $true
+        $correlatedAccount = (Invoke-UltimoUserRestMethod @splatInvoke -Verbose:$false).properties.UserDetails
     } catch {
-        if ($_.Exception.Message -eq "User $($aRef) not found.") {
-            $userFound = $false
-        } else {
+        if ($_.Exception.Message -ne "User $($actionContext.References.Account) not found.") {
             throw $_
         }
     }
 
-
-    Write-Verbose "Verifying if a Ultimo-User account for [$($p.DisplayName)] exists"
-    if ($userFound) {
-        $action = 'Found'
-        $dryRunMessage = "Revoke Ultimo-User entitlement: [$($pRef.Reference)] from: [$($p.DisplayName)] will be executed during enforcement"
-    } elseif ($null -eq $responseUser) {
+    if ($null -ne $correlatedAccount) {
+        $action = 'RevokePermission'
+        $dryRunMessage = "Revoke Ultimo-User permission: [$($actionContext.References.Permission.DisplayName)] will be executed during enforcement"
+    } else {
         $action = 'NotFound'
-        $dryRunMessage = "Ultimo-User account for: [$($p.DisplayName)] not found. Possibly already deleted. Skipping action"
+        $dryRunMessage = "Ultimo-User account: [$($actionContext.References.Account)] for person: [$($personContext.Person.DisplayName)] could not be found, possibly indicating that it could be deleted, or the account is not correlated"
     }
-    Write-Verbose $dryRunMessage
 
-    # Add an auditMessage showing what will happen during enforcement
-    if ($dryRun -eq $true) {
-        Write-Warning "[DryRun] $dryRunMessage"
+    # Add a message and the result of each of the validations showing what will happen during enforcement
+    if ($actionContext.DryRun -eq $true) {
+        Write-Information "[DryRun] $dryRunMessage"
     }
 
     # Process
-    if (-not($dryRun -eq $true)) {
+    if (-not($actionContext.DryRun -eq $true)) {
         switch ($action) {
-            'Found' {
-                Write-Verbose "Revoking Ultimo-User entitlement: [$($pRef.Reference)]"
-                if ($pref.reference -in $currentUser.AuthorizationGroups.sgrousegroid) {
+            'RevokePermission' {
+                Write-Information "Revoking Ultimo-User permission: [$($actionContext.References.Permission.DisplayName)] - [$($actionContext.References.Permission.Reference)]"
+
+                if ($actionContext.References.Permission.Reference -in $correlatedAccount.AuthorizationGroups.sgrousegroid) {
                     $splatInvoke['Body'] = @{
                         Action  = 'RevokeAuthorizationGroup'
-                        UserId  = $aRef
-                        GroupId = $pRef.Reference
+                        UserId  = $actionContext.References.Account
+                        GroupId = $actionContext.References.Permission.Reference
                     } | ConvertTo-Json
                     $null = (Invoke-UltimoUserRestMethod @splatInvoke -Verbose:$false)
                 } else {
-                    Write-Verbose "Permissions [$($pref.reference)] already revoked"
+                    Write-Information "Permissions [$($actionContext.References.Permission.DisplayName)] already revoked"
                 }
-
-                $auditLogs.Add([PSCustomObject]@{
-                        Message = "Revoke Ultimo-User entitlement: [$($pRef.Reference)] was successful"
+                $outputContext.Success = $true
+                $outputContext.AuditLogs.Add([PSCustomObject]@{
+                        Message = "Revoke permission [$($actionContext.References.Permission.DisplayName)] was successful"
                         IsError = $false
                     })
-                break
             }
 
             'NotFound' {
-                $auditLogs.Add([PSCustomObject]@{
-                        Message = "Ultimo-User account for: [$($p.DisplayName)] not found. Possibly already deleted. Skipping action"
+                $outputContext.Success = $true
+                $outputContext.AuditLogs.Add([PSCustomObject]@{
+                        Message = "Ultimo-User account: [$($actionContext.References.Account)] for person: [$($personContext.Person.DisplayName)] could not be found, possibly indicating that it could be deleted, or the account is not correlated"
                         IsError = $false
                     })
                 break
             }
         }
-
-        $success = $true
     }
 } catch {
-    $success = $false
+    $outputContext.success = $false
     $ex = $PSItem
     $errorObj = Resolve-Ultimo-UserError -ErrorObject $ex
-    $auditMessage = "Could not revoke Ultimo-User account. Error: $($errorObj.FriendlyMessage)"
-    Write-Verbose "Error at Line '$($errorObj.ScriptLineNumber)': $($errorObj.Line). Error: $($errorObj.ErrorDetails)"
-
-    $auditLogs.Add([PSCustomObject]@{
-            Message = $auditMessage
+    Write-Warning "Error at Line '$($errorObj.ScriptLineNumber)': $($errorObj.Line). Error: $($errorObj.ErrorDetails)"
+    $outputContext.AuditLogs.Add([PSCustomObject]@{
+            Message = "Could not revoke Ultimo-User account. Error: $($errorObj.FriendlyMessage)"
             IsError = $true
         })
-    # End
-} finally {
-    $result = [PSCustomObject]@{
-        Success   = $success
-        Auditlogs = $auditLogs
-    }
-    Write-Output $result | ConvertTo-Json -Depth 10
 }

@@ -1,23 +1,10 @@
-#############################################
+#################################################
 # HelloID-Conn-Prov-Target-Ultimo-User-Enable
-#
-# Version: 1.0.0
-#############################################
-# Initialize default values
-$config = $configuration | ConvertFrom-Json
-$p = $person | ConvertFrom-Json
-$aRef = $AccountReference | ConvertFrom-Json
-$success = $false
-$auditLogs = [System.Collections.Generic.List[PSCustomObject]]::new()
+# PowerShell V2
+#################################################
 
 # Enable TLS1.2
 [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor [System.Net.SecurityProtocolType]::Tls12
-
-# Set debug logging
-switch ($($config.IsDebug)) {
-    $true { $VerbosePreference = 'Continue' }
-    $false { $VerbosePreference = 'SilentlyContinue' }
-}
 
 #region functions
 function Invoke-UltimoUserRestMethod {
@@ -42,8 +29,8 @@ function Invoke-UltimoUserRestMethod {
     process {
         try {
             $headers = @{
-                APIKey               = $config.APIKey
-                ApplicationElementId = $config.ApplicationElementId
+                APIKey               = $actionContext.Configuration.APIKey
+                ApplicationElementId = $actionContext.Configuration.ApplicationElementId
             }
             $splatParams = @{
                 Uri         = $Uri
@@ -52,7 +39,6 @@ function Invoke-UltimoUserRestMethod {
                 ContentType = $ContentType
             }
             if ($Body) {
-                Write-Verbose 'Adding body to request'
                 $splatParams['Body'] = $Body
             }
             $response = Invoke-RestMethod @splatParams -Verbose:$false
@@ -106,63 +92,80 @@ function Resolve-Ultimo-UserError {
 }
 #endregion
 
-# Begin
 try {
     # Verify if [aRef] has a value
-    if ([string]::IsNullOrEmpty($($aRef))) {
+    if ([string]::IsNullOrEmpty($($actionContext.References.Account))) {
         throw 'The account reference could not be found'
     }
 
-    Write-Verbose "Verifying if a Ultimo-User account for [$($p.DisplayName)] exists"
-    $splatInvoke = @{
-        uri    = "$($config.BaseUrl)/api/v1/action/_ExternalAuthorizationManagement"
-        Method = 'POST'
-        Body   = ( @{
-                Action = 'GetUser'
-                UserId = $aRef
-            } | ConvertTo-Json)
+    Write-Information "Verifying if a Ultimo-User account for [$($personContext.Person.DisplayName)] exists"
+    try {
+        $splatInvoke = @{
+            uri    = "$($actionContext.Configuration.BaseUrl)/api/v1/action/_ExternalAuthorizationManagement"
+            Method = 'POST'
+            Body   = ( @{
+                    Action = 'GetUser'
+                    UserId = $actionContext.References.Account
+                } | ConvertTo-Json)
+        }
+        $correlatedAccount = (Invoke-UltimoUserRestMethod @splatInvoke -Verbose:$false).properties.UserDetails
+    } catch {
+        if ($_.Exception.Message -ne "User $($actionContext.References.Account) not found.") {
+            throw $_
+        }
     }
-    $currentUser = (Invoke-UltimoUserRestMethod @splatInvoke -Verbose:$false).properties.UserDetails
 
-    # Add an auditMessage showing what will happen during enforcement
-    if ($dryRun -eq $true) {
-        Write-Warning "[DryRun] Enable Ultimo-User account for: [$($p.DisplayName)] will be executed during enforcement"
+    if ($null -ne $correlatedAccount) {
+        $action = 'EnableAccount'
+        $dryRunMessage = "Enable Ultimo-User account: [$($actionContext.References.Account)] for person: [$($personContext.Person.DisplayName)] will be executed during enforcement"
+    } else {
+        $action = 'NotFound'
+        $dryRunMessage = "Ultimo-User account: [$($actionContext.References.Account)] for person: [$($personContext.Person.DisplayName)] could not be found, possibly indicating that it could be deleted, or the account is not correlated"
+    }
+
+    # Add a message and the result of each of the validations showing what will happen during enforcement
+    if ($actionContext.DryRun -eq $true) {
+        Write-Information "[DryRun] $dryRunMessage"
     }
 
     # Process
-    if (-not($dryRun -eq $true)) {
-        Write-Verbose "Enabling Ultimo-User account with accountReference: [$aRef]"
-        $splatInvoke['Body'] = @{
-            Action          = 'UpdateUser'
-            UserDescription = $currentUser.Description
-            UserId          = $aRef
-            EnableAccount   = $true
-        } | ConvertTo-Json
-        $null = (Invoke-UltimoUserRestMethod @splatInvoke -Verbose:$false)
+    if (-not($actionContext.DryRun -eq $true)) {
+        switch ($action) {
+            'EnableAccount' {
+                Write-Information "Enabling Ultimo-User account with accountReference: [$($actionContext.References.Account)]"
+                $splatInvoke['Body'] = @{
+                    Action          = 'UpdateUser'
+                    UserDescription = $correlatedAccount.Description
+                    UserId          = $actionContext.References.Account
+                    EnableAccount   = $true
+                } | ConvertTo-Json
+                $null = (Invoke-UltimoUserRestMethod @splatInvoke -Verbose:$false)
+
+                $outputContext.Success = $true
+                $outputContext.AuditLogs.Add([PSCustomObject]@{
+                        Message = 'Enable account was successful'
+                        IsError = $false
+                    })
+                break
+            }
+
+            'NotFound' {
+                $outputContext.Success = $false
+                $outputContext.AuditLogs.Add([PSCustomObject]@{
+                        Message = "Ultimo-User account: [$($actionContext.References.Account)] for person: [$($personContext.Person.DisplayName)] could not be found, possibly indicating that it could be deleted"
+                        IsError = $true
+                    })
+                break
+            }
+        }
     }
-
-    $success = $true
-    $auditLogs.Add([PSCustomObject]@{
-            Message = 'Enable account was successful'
-            IsError = $false
-        })
-
 } catch {
-    $success = $false
+    $outputContext.success = $false
     $ex = $PSItem
     $errorObj = Resolve-Ultimo-UserError -ErrorObject $ex
-    $auditMessage = "Could not enable Ultimo-User account. Error: $($errorObj.FriendlyMessage)"
-    Write-Verbose "Error at Line '$($errorObj.ScriptLineNumber)': $($errorObj.Line). Error: $($errorObj.ErrorDetails)"
-
-    $auditLogs.Add([PSCustomObject]@{
-            Message = $auditMessage
+    Write-Warning "Error at Line '$($errorObj.ScriptLineNumber)': $($errorObj.Line). Error: $($errorObj.ErrorDetails)"
+    $outputContext.AuditLogs.Add([PSCustomObject]@{
+            Message = "Could not enable Ultimo-User account. Error: $($errorObj.FriendlyMessage)"
             IsError = $true
         })
-    # End
-} finally {
-    $result = [PSCustomObject]@{
-        Success   = $success
-        Auditlogs = $auditLogs
-    }
-    Write-Output $result | ConvertTo-Json -Depth 10
 }
