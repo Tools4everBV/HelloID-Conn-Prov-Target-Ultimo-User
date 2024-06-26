@@ -1,7 +1,7 @@
-##################################################
-# HelloID-Conn-Prov-Target-Ultimo-User-Disable
+################################################################
+# HelloID-Conn-Prov-Target-Ultimo-User-GrantPermission-Group
 # PowerShell V2
-##################################################
+################################################################
 
 # Enable TLS1.2
 [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor [System.Net.SecurityProtocolType]::Tls12
@@ -92,6 +92,7 @@ function Resolve-Ultimo-UserError {
 }
 #endregion
 
+# Begin
 try {
     # Verify if [aRef] has a value
     if ([string]::IsNullOrEmpty($($actionContext.References.Account))) {
@@ -115,10 +116,9 @@ try {
         }
     }
 
-
     if ($null -ne $correlatedAccount) {
-        $action = 'DisableAccount'
-        $dryRunMessage = "Disable Ultimo-User account: [$($actionContext.References.Account)] for person: [$($personContext.Person.DisplayName)] will be executed during enforcement"
+        $action = 'GrantPermission'
+        $dryRunMessage = "Grant Ultimo-User permission: [$($actionContext.References.Permission.DisplayName)] will be executed during enforcement"
     } else {
         $action = 'NotFound'
         $dryRunMessage = "Ultimo-User account: [$($actionContext.References.Account)] for person: [$($personContext.Person.DisplayName)] could not be found, possibly indicating that it could be deleted, or the account is not correlated"
@@ -132,31 +132,34 @@ try {
     # Process
     if (-not($actionContext.DryRun -eq $true)) {
         switch ($action) {
-            'DisableAccount' {
-                Write-Information "Disabling Ultimo-User account with accountReference: [$($actionContext.References.Account)]"
-                $splatInvoke['Body'] = @{
-                    Action          = 'UpdateUser'
-                    UserDescription = $correlatedAccount.Description
-                    UserId          = $actionContext.References.Account
-                    DisableAccount  = $true
-                } | ConvertTo-Json
-                $null = (Invoke-UltimoUserRestMethod @splatInvoke -Verbose:$false)
+            'GrantPermission' {
+                Write-Information "Granting Ultimo-User permission: [$($actionContext.References.Permission.DisplayName)] - [$($actionContext.References.Permission.Reference)]"
 
+
+                if ($actionContext.References.Permission.Reference -notin $correlatedAccount.AuthorizationGroups.sgrousegroid) {
+                    $splatInvoke['Body'] = @{
+                        Action  = 'GrantAuthorizationGroup'
+                        UserId  = $actionContext.References.Account
+                        GroupId = $actionContext.References.Permission.Reference
+                    } | ConvertTo-Json
+                    $null = (Invoke-UltimoUserRestMethod @splatInvoke -Verbose:$false)
+                } else {
+                    Write-Information "Permissions [$($actionContext.References.Permission.Reference)] already granted"
+                }
 
                 $outputContext.Success = $true
                 $outputContext.AuditLogs.Add([PSCustomObject]@{
-                        Message = 'Disable account was successful'
-                        IsError = $false
-                    })
-                break
+                    Message = "Grant permission [$($actionContext.References.Permission.DisplayName)] was successful"
+                    IsError = $false
+                })
             }
 
             'NotFound' {
-                $outputContext.Success = $true
+                $outputContext.Success  = $false
                 $outputContext.AuditLogs.Add([PSCustomObject]@{
-                        Message = "Ultimo-User account: [$($actionContext.References.Account)] for person: [$($personContext.Person.DisplayName)] could not be found, possibly indicating that it could be deleted, or the account is not correlated"
-                        IsError = $false
-                    })
+                    Message = "Ultimo-User account: [$($actionContext.References.Account)] for person: [$($personContext.Person.DisplayName)] could not be found, possibly indicating that it could be deleted, or the account is not correlated"
+                    IsError = $true
+                })
                 break
             }
         }
@@ -167,7 +170,7 @@ try {
     $errorObj = Resolve-Ultimo-UserError -ErrorObject $ex
     Write-Warning "Error at Line '$($errorObj.ScriptLineNumber)': $($errorObj.Line). Error: $($errorObj.ErrorDetails)"
     $outputContext.AuditLogs.Add([PSCustomObject]@{
-            Message = "Could not disable Ultimo-User account. Error: $($errorObj.FriendlyMessage)"
+            Message = "Could not grant Ultimo-User account. Error: $($errorObj.FriendlyMessage)"
             IsError = $true
         })
 }

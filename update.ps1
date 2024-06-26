@@ -1,31 +1,10 @@
-#############################################
+#################################################
 # HelloID-Conn-Prov-Target-Ultimo-User-Update
-#
-# Version: 1.0.0
-#############################################
-# Initialize default values
-$config = $configuration | ConvertFrom-Json
-$p = $person | ConvertFrom-Json
-$aRef = $AccountReference | ConvertFrom-Json
-$success = $false
-$auditLogs = [System.Collections.Generic.List[PSCustomObject]]::new()
-
-# Account mapping
-$account = [PSCustomObject]@{
-    UserId              = $aRef
-    ExternalAccountName = $p.Accounts.MicrosoftActiveDirectory.SamAccountName
-    UserDescription     = $p.DisplayName
-    GroupId             = $p.PrimaryContract.Title.Code
-}
+# PowerShell V2
+#################################################
 
 # Enable TLS1.2
 [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor [System.Net.SecurityProtocolType]::Tls12
-
-# Set debug logging
-switch ($($config.IsDebug)) {
-    $true { $VerbosePreference = 'Continue' }
-    $false { $VerbosePreference = 'SilentlyContinue' }
-}
 
 #region functions
 function Invoke-UltimoUserRestMethod {
@@ -50,8 +29,8 @@ function Invoke-UltimoUserRestMethod {
     process {
         try {
             $headers = @{
-                APIKey               = $config.APIKey
-                ApplicationElementId = $config.ApplicationElementId
+                APIKey               = $actionContext.Configuration.APIKey
+                ApplicationElementId = $actionContext.Configuration.ApplicationElementId
             }
             $splatParams = @{
                 Uri         = $Uri
@@ -60,7 +39,6 @@ function Invoke-UltimoUserRestMethod {
                 ContentType = $ContentType
             }
             if ($Body) {
-                Write-Verbose 'Adding body to request'
                 $splatParams['Body'] = $Body
             }
             $response = Invoke-RestMethod @splatParams -Verbose:$false
@@ -114,118 +92,105 @@ function Resolve-Ultimo-UserError {
 }
 #endregion
 
-
-# Begin
 try {
     # Verify if [aRef] has a value
-    if ([string]::IsNullOrEmpty($($aRef))) {
+    if ([string]::IsNullOrEmpty($($actionContext.References.Account))) {
         throw 'The account reference could not be found'
     }
 
-    # Mapping
-    Write-Verbose 'Use mapping to determine the desired Ultimo Configuration'
-    $mappingGrouped = (Import-Csv $config.mappingFilePath ) | Group-Object -Property HelloIdTitle -AsHashTable -AsString
+
+    Write-Information 'Use mapping to determine the desired Ultimo Configuration'
+    $mappingGrouped = (Import-Csv $actionContext.Configuration.mappingFilePath ) | Group-Object -Property HelloIdTitle -AsHashTable -AsString
     if ($null -eq $mappingGrouped) {
         throw 'Empty Mapping File, please check you mapping'
     }
-    $mappedUltimoConfigurationName = $mappingGrouped["$($account.GroupId)"].UltimoConfiguration
-    if ( $null -eq $mappedUltimoConfigurationName ) {
-        throw "No Ultimo Configuration found in the mapping with [$($Account.GroupId)]"
+
+    if ([string]::IsNullOrEmpty($actionContext.Data.GroupId)) {
+        throw 'No GroupId Specified in the FieldMapping. This is required for the UltimoConfiguration Mapping'
     }
 
-    Write-Verbose "Verifying if a Ultimo-User account for [$($p.DisplayName)] exists"
+    $mappedUltimoConfigurationName = $mappingGrouped["$($actionContext.Data.GroupId)"].UltimoConfiguration
+    if ( $null -eq $mappedUltimoConfigurationName ) {
+        throw "No Ultimo Configuration found in the mapping with [$($actionContext.Data.GroupId)]"
+    }
+    $actionContext.Data.GroupId = $mappedUltimoConfigurationName
+
+    Write-Information "Verifying if a Ultimo-User account for [$($personContext.Person.DisplayName)] exists"
     try {
         $splatInvoke = @{
-            uri    = "$($config.BaseUrl)/api/v1/action/_ExternalAuthorizationManagement"
+            uri    = "$($actionContext.Configuration.BaseUrl)/api/v1/action/_ExternalAuthorizationManagement"
             Method = 'POST'
             Body   = ( @{
                     Action = 'GetUser'
-                    UserId = $aRef
+                    UserId = $actionContext.References.Account
                 } | ConvertTo-Json)
         }
-        $currentUser = (Invoke-UltimoUserRestMethod @splatInvoke -Verbose:$false).properties.UserDetails
-        $userFound = $true
+        $correlatedAccount = (Invoke-UltimoUserRestMethod @splatInvoke -Verbose:$false).properties.UserDetails
     } catch {
-        if ($_.Exception.Message -eq "User $($aRef) not found.") {
-            $userFound = $false
-        } else {
+        if ($_.Exception.Message -ne "User $($actionContext.References.Account) not found.") {
             throw $_
         }
     }
-
+    # Making sure PreviousData object match ActionContext.Data
+    $outputContext.PreviousData = $correlatedAccount | Select-Object * , @{Name = 'UserDescription'; Expression = { $_.Description } }
+    $outputContext.PreviousData | Add-Member -NotePropertyMembers @{
+        groupId = $correlatedAccount.ConfigurationGroup.sgroname
+    }
     # Always compare the account against the current account in target system
     # Custom compare object to compare because the inconsistency between request en response
     $currentAccount = [PSCustomObject]@{
-        ExternalAccountName = $currentUser.ExternalAccountName
-        UserDescription     = $currentUser.Description
+        ExternalAccountName = $correlatedAccount.ExternalAccountName
+        UserDescription     = $correlatedAccount.Description
     }
-    $splatCompareProperties = @{
-        ReferenceObject  = @($account.PSObject.Properties)
-        DifferenceObject = @($currentAccount.PSObject.Properties)
-    }
-    $actions = @()
-    $propertiesChanged = (Compare-Object @splatCompareProperties -PassThru).Where({ $_.SideIndicator -eq '=>' })
-    if ($propertiesChanged -and $userFound) {
-        $actions += 'Update'
-        $dryRunMessage = "Account property(s) required to update: [$($propertiesChanged.name -join ',')]"
-    } elseif (-not($propertiesChanged)) {
-        $actions += 'NoChanges'
-        $dryRunMessage = 'No changes will be made to the account during enforcement'
-    } elseif (-not $userFound) {
-        $actions += 'NotFound'
-        $dryRunMessage = "Ultimo-User account for: [$($p.DisplayName)] not found. Possibly deleted"
-    }
-    Write-Verbose $dryRunMessage
 
-    if ($currentUser.ConfigurationGroup.sgroname -ne $mappedUltimoConfigurationName -and ('NotFound' -notin $actions)) {
-        $actions += 'Update-Configuration'
+    $actionList = @()
+    if ($null -ne $correlatedAccount) {
+        $splatCompareProperties = @{
+            ReferenceObject  = @($actionContext.Data.PSObject.Properties)
+            DifferenceObject = @($currentAccount.PSObject.Properties)
+        }
+        $propertiesChanged = Compare-Object @splatCompareProperties -PassThru | Where-Object { $_.SideIndicator -eq '=>' }
+        if ($propertiesChanged) {
+            $actionList += 'UpdateAccount'
+            $dryRunMessage = "Account property(s) required to update: $($propertiesChanged.Name -join ', ')"
+        } else {
+            $actionList += 'NoChanges'
+            $dryRunMessage += 'No changes will be made to the account during enforcement'
+        }
+    } else {
+        $actionList += 'NotFound'
+        $dryRunMessage += "Ultimo-User account for: [$($personContext.Person.DisplayName)] not found. Possibly deleted."
     }
 
 
-    # Add an auditMessage showing what will happen during enforcement
-    if ($dryRun -eq $true) {
-        Write-Warning "[DryRun] $dryRunMessage"
+    if ($correlatedAccount.ConfigurationGroup.sgroname -ne $mappedUltimoConfigurationName -and ('NotFound' -notin $actionList)) {
+        $actionList += 'Update-Configuration'
+    }
+
+
+    # Add a message and the result of each of the validations showing what will happen during enforcement
+    if ($actionContext.DryRun -eq $true) {
+        Write-Information "[DryRun] $dryRunMessage"
     }
 
     # Process
-    if (-not($dryRun -eq $true)) {
-        foreach ($action in $actions) {
+    if (-not($actionContext.DryRun -eq $true)) {
+        foreach ($action in $actionList) {
             switch ($action) {
-                'Update' {
-                    Write-Verbose "Updating Ultimo-User account with accountReference: [$aRef]"
-                    if ('groupId' -in $account.PSObject.Properties.name ) {
-                        $account.PSObject.Properties.Remove('groupId')
+                'UpdateAccount' {
+                    Write-Information "Updating Ultimo-User account with accountReference: [$($actionContext.References.Account)]"
+                    if ('groupId' -in $actionContext.Data.PSObject.Properties.name ) {
+                        $actionContext.Data.PSObject.Properties.Remove('groupId')
                     }
-                    $account | Add-Member -NotePropertyMembers @{
+                    $actionContext.Data | Add-Member -NotePropertyMembers @{
                         Action = 'UpdateUser'
-                    }
-                    $splatInvoke['Body'] = ($account | ConvertTo-Json)
+                        UserId = $actionContext.References.Account
+                    } -Force
+                    $splatInvoke['Body'] = ($actionContext.Data | ConvertTo-Json)
                     $null = (Invoke-UltimoUserRestMethod @splatInvoke -Verbose:$false).properties
-
-                    $success = $true
-                    $auditLogs.Add([PSCustomObject]@{
-                            Message = 'Update account was successful'
+                    $outputContext.AuditLogs.Add([PSCustomObject]@{
+                            Message = "Update account was successful, Account property(s) updated: [$($propertiesChanged.name -join ',')]"
                             IsError = $false
-                        })
-                    break
-                }
-
-                'NoChanges' {
-                    Write-Verbose "No changes to Ultimo-User account with accountReference: [$aRef]"
-
-                    $success = $true
-                    $auditLogs.Add([PSCustomObject]@{
-                            Message = 'No changes will be made to the account during enforcement'
-                            IsError = $false
-                        })
-                    break
-                }
-
-                'NotFound' {
-                    $success = $false
-                    $auditLogs.Add([PSCustomObject]@{
-                            Message = "Ultimo-User account for: [$($p.DisplayName)] not found. Possibly deleted"
-                            IsError = $true
                         })
                     break
                 }
@@ -233,38 +198,48 @@ try {
                 'Update-Configuration' {
                     $configBody = @{
                         Action  = 'ChangeConfigurationGroup'
-                        UserId  = $aRef
+                        UserId  = $actionContext.References.Account
                         GroupId = $mappedUltimoConfigurationName
                     }
                     $splatInvoke['Body'] = ($configBody | ConvertTo-Json)
                     $null = Invoke-UltimoUserRestMethod @splatInvoke -Verbose:$false
 
-                    $auditLogs.Add([PSCustomObject]@{
+                    $outputContext.AuditLogs.Add([PSCustomObject]@{
                             Message = "Update-Configuration for account was successful. Configuration is: [$mappedUltimoConfigurationName]"
                             IsError = $false
+                        })
+                    break
+                }
+
+                'NoChanges' {
+                    $outputContext.AuditLogs.Add([PSCustomObject]@{
+                            Message = "No changes to Ultimo-User account with accountReference: [$($actionContext.References.Account)]"
+                            IsError = $false
+                        })
+                    Write-Information "No changes to Ultimo-User account with accountReference: [$($actionContext.References.Account)]"
+                    break
+                }
+
+                'NotFound' {
+                    $outputContext.AuditLogs.Add([PSCustomObject]@{
+                            Message = "Ultimo-User account with accountReference: [$($actionContext.References.Account)] could not be found, possibly indicating that it could be deleted"
+                            IsError = $true
                         })
                     break
                 }
             }
         }
     }
+    if (-not ($outputContext.AuditLogs.isError -contains $true)) {
+        $outputContext.Success = $true
+    }
 } catch {
-    $success = $false
+    $outputContext.success = $false
     $ex = $PSItem
     $errorObj = Resolve-Ultimo-UserError -ErrorObject $ex
-    $auditMessage = "Could not update Ultimo-User account. Error: $($errorObj.FriendlyMessage)"
-    Write-Verbose "Error at Line '$($errorObj.ScriptLineNumber)': $($errorObj.Line). Error: $($errorObj.ErrorDetails)"
-
-    $auditLogs.Add([PSCustomObject]@{
-            Message = $auditMessage
+    Write-Warning "Error at Line '$($errorObj.ScriptLineNumber)': $($errorObj.Line). Error: $($errorObj.ErrorDetails)"
+    $outputContext.AuditLogs.Add([PSCustomObject]@{
+            Message = "Could not update Ultimo-User account. Error: $($errorObj.FriendlyMessage)"
             IsError = $true
         })
-    # End
-} finally {
-    $result = [PSCustomObject]@{
-        Success   = $success
-        Account   = $account
-        Auditlogs = $auditLogs
-    }
-    Write-Output $result | ConvertTo-Json -Depth 10
 }
