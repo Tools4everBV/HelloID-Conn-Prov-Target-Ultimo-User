@@ -1,5 +1,5 @@
 ############################################################
-# HelloID-Conn-Prov-Target-Ultimo-User-Permissions-Group
+# HelloID-Conn-Prov-Target-Ultimo-User-Import
 # PowerShell V2
 ############################################################
 
@@ -41,11 +41,15 @@ function Invoke-UltimoUserRestMethod {
             if ($Body) {
                 $splatParams['Body'] = $Body
             }
+            
             $response = Invoke-RestMethod @splatParams -Verbose:$false
+            
             if ( $response.properties.ResponseSummary.Succes -eq $false) {
+                Write-Warning ($response.properties.ResponseSummary | ConvertTo-Json)
                 throw $response.properties.ResponseSummary.Message
             }
-            Write-Output $response
+            
+            return $response
         } catch {
             $PSCmdlet.ThrowTerminatingError($_)
         }
@@ -93,29 +97,56 @@ function Resolve-Ultimo-UserError {
 #endregion
 
 try {
-    Write-Information 'Retrieving permissions'
+	Write-Information 'Starting target account import'  
+	
+    Write-Information 'Retrieving users'
     $splatInvoke = @{
         uri    = "$($actionContext.Configuration.BaseUrl)/api/v1/action/_ExternalAuthorizationManagement"
         Method = 'POST'
         Body   = ( @{
-                Action = 'GetAllAuthorizationGroups'
+                Action = 'GetAllUsers'
             } | ConvertTo-Json)
     }
-    $retrievedPermissions = (Invoke-UltimoUserRestMethod  @splatInvoke -Verbose:$false).properties.AllAvailableAuthorizationGroups
 
-    foreach ($permission in $retrievedPermissions) {
-        $outputContext.Permissions.Add(
-            @{
-                DisplayName    = $permission.GroupName
-                Identification = @{
-                    Reference   = $permission.GroupId
-                }
-            }
-        )
+    $getAllUserResponse = Invoke-UltimoUserRestMethod  @splatInvoke -Verbose:$false
+    $existingAccounts = $getAllUserResponse.properties.AllUsers
+
+    $existingAccounts  | Add-Member -MemberType NoteProperty -Name 'UserDescription' -Value $null
+    $existingAccounts  | Add-Member -MemberType NoteProperty -Name 'UserId' -Value $null
+
+    foreach ($account in $existingAccounts) {
+        
+		$enabled = $false
+        if([bool]($account.PSobject.Properties.name -Contains "ActivationDateTime") -and -not([string]::IsNullOrEmpty($account.ActivationDateTime))) {
+            $enabled = $true
+        }
+		
+        $userName = $account.ExternalAccountName
+        if([string]::IsNullOrEmpty($userName)){
+            $userName = $account.Id
+        }
+
+        $displayname = $account.Description
+        if([string]::IsNullOrEmpty($displayname)){
+            $displayname = $account.Id
+        }
+
+        $account.UserDescription = $account.Description
+        $account.UserId = $account.Id
+
+        # Return the result
+        Write-Output @{
+            AccountReference = $account.Id
+            DisplayName      = $displayname
+            UserName         = $userName
+            Enabled          = $enabled
+            Data             = $account
+        }
     }
+    Write-Information 'Target account import completed'
 } catch {
     $ex = $PSItem
     $errorObj = Resolve-Ultimo-UserError -ErrorObject $ex
-    Write-Warning "Could not retrieve Ultimo-User permissions. Error: $($errorObj.FriendlyMessage)"
+    Write-Warning "Could not retrieve Ultimo-User users. Error: $($errorObj.FriendlyMessage)"
     Write-Warning "Error at Line '$($errorObj.ScriptLineNumber)': $($errorObj.Line). Error: $($errorObj.ErrorDetails)"
 }

@@ -117,7 +117,7 @@ try {
 
     if ($null -ne $correlatedAccount) {
         $action = 'RevokePermission'
-        $dryRunMessage = "Revoke Ultimo-User permission: [$($actionContext.References.Permission.DisplayName)] will be executed during enforcement"
+        $dryRunMessage = "Revoke Ultimo-User permission: [$($actionContext.PermissionDisplayName)] will be executed during enforcement"
     } else {
         $action = 'NotFound'
         $dryRunMessage = "Ultimo-User account: [$($actionContext.References.Account)] for person: [$($personContext.Person.DisplayName)] could not be found, possibly indicating that it could be deleted, or the account is not correlated"
@@ -132,7 +132,7 @@ try {
     if (-not($actionContext.DryRun -eq $true)) {
         switch ($action) {
             'RevokePermission' {
-                Write-Information "Revoking Ultimo-User permission: [$($actionContext.References.Permission.DisplayName)] - [$($actionContext.References.Permission.Reference)]"
+                Write-Information "Revoking Ultimo-User permission: [$($actionContext.PermissionDisplayName)] - [$($actionContext.References.Permission.Reference)]"
 
                 if ($actionContext.References.Permission.Reference -in $correlatedAccount.AuthorizationGroups.sgrousegroid) {
                     $splatInvoke['Body'] = @{
@@ -142,11 +142,11 @@ try {
                     } | ConvertTo-Json
                     $null = (Invoke-UltimoUserRestMethod @splatInvoke -Verbose:$false)
                 } else {
-                    Write-Information "Permissions [$($actionContext.References.Permission.DisplayName)] already revoked"
+                    Write-Information "Permissions [$($actionContext.PermissionDisplayName)] already revoked"
                 }
                 $outputContext.Success = $true
                 $outputContext.AuditLogs.Add([PSCustomObject]@{
-                        Message = "Revoke permission [$($actionContext.References.Permission.DisplayName)] was successful"
+                        Message = "Revoke permission [$($actionContext.PermissionDisplayName)] was successful"
                         IsError = $false
                     })
             }
