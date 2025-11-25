@@ -118,7 +118,7 @@ try {
 
     if ($null -ne $correlatedAccount) {
         $action = 'GrantPermission'
-        $dryRunMessage = "Grant Ultimo-User permission: [$($actionContex.PermissionDisplayName)] will be executed during enforcement"
+        $dryRunMessage = "Grant Ultimo-User permission: [$($actionContext.PermissionDisplayName)] will be executed during enforcement"
     } else {
         $action = 'NotFound'
         $dryRunMessage = "Ultimo-User account: [$($actionContext.References.Account)] for person: [$($personContext.Person.DisplayName)] could not be found, possibly indicating that it could be deleted, or the account is not correlated"
@@ -133,7 +133,7 @@ try {
     if (-not($actionContext.DryRun -eq $true)) {
         switch ($action) {
             'GrantPermission' {
-                Write-Information "Granting Ultimo-User permission: [$($actionContex.PermissionDisplayName)] - [$($actionContext.References.Permission.Reference)]"
+                Write-Information "Granting Ultimo-User permission: [$($actionContext.PermissionDisplayName)] - [$($actionContext.References.Permission.Reference)]"
 
 
                 if ($actionContext.References.Permission.Reference -notin $correlatedAccount.AuthorizationGroups.sgrousegroid) {
@@ -149,7 +149,7 @@ try {
 
                 $outputContext.Success = $true
                 $outputContext.AuditLogs.Add([PSCustomObject]@{
-                    Message = "Grant permission [$($actionContex.PermissionDisplayName)] was successful"
+                    Message = "Grant permission [$($actionContext.PermissionDisplayName)] was successful"
                     IsError = $false
                 })
             }
