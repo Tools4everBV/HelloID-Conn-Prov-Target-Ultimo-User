@@ -125,7 +125,7 @@ try {
     # Validate correlation configuration
     if ($actionContext.CorrelationConfiguration.Enabled) {
         $correlationField = $actionContext.CorrelationConfiguration.accountField
-        $correlationValue = $actionContext.CorrelationConfiguration.accountFieldValue
+        $correlationValue = $actionContext.CorrelationConfiguration.personFieldValue
 
         if ([string]::IsNullOrEmpty($($correlationField))) {
             throw 'Correlation is enabled but not configured correctly'
