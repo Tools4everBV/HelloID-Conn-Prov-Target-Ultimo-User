@@ -86,11 +86,11 @@ The following settings are required to connect to the API.
 
 The correlation configuration is used to specify which properties will be used to match an existing account within _Ultimo-User_ to a person in _HelloID_.
 
-| Setting                   | Value    |
-| ------------------------- | -------- |
-| Enable correlation        | `True`   |
-| Person correlation field  | ``       |
-| Account correlation field | `UserId` |
+| Setting                   | Value               |
+| ------------------------- | ------------------- |
+| Enable correlation        | `True`              |
+| Person correlation field  | `Person.ExternalId` |
+| Account correlation field | `UserId`            |
 
 > [!TIP]
 > _For more information on correlation, please refer to our correlation [documentation](https://docs.helloid.com/en/provisioning/target-systems/powershell-v2-target-systems/correlation.html) pages_.
