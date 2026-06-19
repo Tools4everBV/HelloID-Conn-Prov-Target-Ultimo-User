@@ -1,139 +1,187 @@
-
 # HelloID-Conn-Prov-Target-Ultimo-User
-
-> [!IMPORTANT]
-> Ultimo currently does not provide a standard interface for user management. Therefore, this Ultimo User connector relies on a custom API interface provided by one of Ultimo's implementation partners. The goal of this custom interface is to standardize user management. Assistance from a Ultimo consultant is required to enable the custom interface.
 
 > [!IMPORTANT]
 > This repository contains the connector and configuration code only. The implementer is responsible to acquire the connection details such as username, password, certificate, etc. You might even need to sign a contract or agreement with the supplier before implementing this connector. Please contact the client's application manager to coordinate the connector requirements.
 
-
 <p align="center">
-  <img src="https://www.tools4ever.nl/connector-logos/ultimo-logo.png">
+  <img src="https://github.com/Tools4everBV/HelloID-Conn-Prov-Target-Ultimo-User/blob/main/Logo.png?raw=true">
 </p>
-
 
 ## Table of contents
 
 - [HelloID-Conn-Prov-Target-Ultimo-User](#helloid-conn-prov-target-ultimo-user)
   - [Table of contents](#table-of-contents)
   - [Introduction](#introduction)
+  - [Supported features](#supported-features)
   - [Getting started](#getting-started)
-    - [Provisioning PowerShell V2 connector](#provisioning-powershell-v2-connector)
-      - [Correlation configuration](#correlation-configuration)
-      - [Field mapping](#field-mapping)
+    - [HelloID Icon URL](#helloid-icon-url)
+    - [Requirements](#requirements)
     - [Connection settings](#connection-settings)
-    - [Prerequisites](#prerequisites)
-    - [Remarks](#remarks)
-  - [Setup the connector](#setup-the-connector)
+    - [Correlation configuration](#correlation-configuration)
+    - [Field mapping](#field-mapping)
+    - [Account Reference](#account-reference)
+  - [Remarks](#remarks)
+    - [Execution order with Employee connector](#execution-order-with-employee-connector)
+    - [Employee correlation behavior](#employee-correlation-behavior)
+    - [EmployeeId cannot be updated](#employeeid-cannot-be-updated)
+    - [Custom comparison object for update logic](#custom-comparison-object-for-update-logic)
+    - [Configuration and authorization group naming](#configuration-and-authorization-group-naming)
+    - [Configuration mapping behavior](#configuration-mapping-behavior)
+    - [Permission model](#permission-model)
+    - [Ultimo retention period](#ultimo-retention-period)
+  - [Development resources](#development-resources)
+    - [API endpoints](#api-endpoints)
+    - [API documentation](#api-documentation)
   - [Getting help](#getting-help)
   - [HelloID docs](#helloid-docs)
 
 ## Introduction
 
-_HelloID-Conn-Prov-Target-Ultimo-User_ is a _target_ connector. Ultimo-User provides a set of REST API's that allow you to programmatically interact with its data. The connector can be utilized in conjunction with the [Employee Connector](https://github.com/Tools4everBV/HelloID-Conn-Prov-Target-Ultimo-Employee) for a full implementation *(Additional details can be found in the [Remarks](#remarks))*. The User part of the connector provides management of User Accounts and assignment of two types of Permissions. Specifically `Configuration Groups` and `Authorization Groups`.
+_HelloID-Conn-Prov-Target-Ultimo-User_ is a _target_ connector. _Ultimo-User_ provides a set of REST APIs that allow you to programmatically interact with its data.
 
-The following lifecycle actions are available:
+The connector can be utilized in conjunction with the [Employee Connector](https://github.com/Tools4everBV/HelloID-Conn-Prov-Target-Ultimo-Employee) for a full implementation. The User part of the connector provides management of User Accounts and assignment of two types of permissions: `Configuration Groups` and `Authorization Groups`.
 
-| Action                                  | Description                                                                           |
-| --------------------------------------- | ------------------------------------------------------------------------------------- |
-| create.ps1                              | Create (or update) and correlate an Account and grants or change Configuration Groups |
-| delete.ps1                              | Not available                                                                         |
-| disable.ps1                             | PowerShell _disable_ lifecycle action                                                 |
-| enable.ps1                              | PowerShell _enable_ lifecycle action                                                  |
-| update.ps1                              | Update the Account and grants or change Configuration Groups                          |
-| permissions/groups/grantPermission.ps1  | PowerShell _grant_ lifecycle action                                                   |
-| permissions/groups/revokePermission.ps1 | PowerShell _revoke_ lifecycle action                                                  |
-| permissions/groups/permissions.ps1      | PowerShell _permissions_ lifecycle action                                             |
-| configuration.json                      | Default _configuration.json_                                                          |
-| fieldMapping.json                       | Default _fieldMapping.json_                                                           |
+## Supported features
+
+The following features are available:
+
+| Feature                                   | Supported | Actions                         | Remarks                             |
+| ----------------------------------------- | --------- | ------------------------------- | ----------------------------------- |
+| **Account Lifecycle**                     | ✅         | Create, Update, Enable, Disable | Delete is not available             |
+| **Permissions**                           | ✅         | Retrieve, Grant, Revoke         | Authorization Groups (entitlements) |
+| **Resources**                             | ❌         | -                               |                                     |
+| **Entitlement Import: Accounts**          | ✅         | -                               |                                     |
+| **Entitlement Import: Permissions**       | ✅         | -                               |                                     |
+| **Governance Reconciliation Resolutions** | ✅         | Disable, Revoke                 | Delete is not available             |
 
 ## Getting started
 
-### Provisioning PowerShell V2 connector
+### HelloID Icon URL
 
-#### Correlation configuration
+URL of the icon used for the HelloID Provisioning target system.
 
-The correlation configuration is used to specify which properties will be used to match an existing account within _Ultimo-User_ to a person in _HelloID_.
+```
+https://raw.githubusercontent.com/Tools4everBV/HelloID-Conn-Prov-Target-Ultimo-User/refs/heads/main/Icon.png
+```
 
-To properly setup the correlation:
+### Requirements
 
-1. Open the `Correlation` tab.
-
-2. Specify the following configuration:
-
-    | Setting                   | Value    |
-    | ------------------------- | -------- |
-    | Enable correlation        | `True`   |
-    | Person correlation field  | ``       |
-    | Account correlation field | `UserId` |
-
-> [!TIP]
-> _For more information on correlation, please refer to our correlation [documentation](https://docs.helloid.com/en/provisioning/target-systems/powershell-v2-target-systems/correlation.html) pages_.
-
-#### Field mapping
-
-The field mapping can be imported by using the _fieldMapping.json_ file.
+- Ultimo does not provide a standard interface for user management in all environments. This connector relies on a custom API interface provided by an Ultimo implementation partner.
+- Assistance from an Ultimo consultant is required to enable and configure this custom interface.
+- The connector relies on the existence of an Ultimo employee. Employee creation can be managed using the [Employee Connector](https://github.com/Tools4everBV/HelloID-Conn-Prov-Target-Ultimo-Employee) or another synchronization method.
+- A mapping CSV file is required to determine the Ultimo configuration group. An example is available in `assets/ConfigurationMapping.csv`.
 
 ### Connection settings
 
 The following settings are required to connect to the API.
 
+| Setting                | Description                                                                           | Mandatory |
+| ---------------------- | ------------------------------------------------------------------------------------- | --------- |
+| BaseUrl                | The URL to the API                                                                    | Yes       |
+| ApiKey                 | The ApiKey to connect to the API                                                      | Yes       |
+| Application Element Id | The ApplicationElementId to connect to the API (required for all user-related action) | Yes       |
+| Mapping File Path      | The file path of the configuration mapping CSV file                                   | Yes       |
 
-| Setting                | Description                                                                         | Mandatory |
-| ---------------------- | ----------------------------------------------------------------------------------- | --------- |
-| BaseUrl                | The URL to the API                                                                  | Yes       |
-| ApiKey                 | The ApiKey to connect to the API                                                    | Yes       |
-| Application Element Id | The ApplicationElementId to connect to the API *(required for all the user action)* | Yes       |
-| Mapping File Path      | The File Path of the mapping file with the Configuration Mapping.                   | Yes       |
+### Correlation configuration
 
+The correlation configuration is used to specify which properties will be used to match an existing account within _Ultimo-User_ to a person in _HelloID_.
 
-### Prerequisites
- - The Ultimo User connector relies on the existence of an existing Ultimo employee. The employee creation can be managed using the [Employee Connector](https://github.com/Tools4everBV/HelloID-Conn-Prov-Target-Ultimo-Employee) or by implementing a different synchronization method with the HR system
- - A mapping CSV file is required to determine the configuration group. An example of the mapping file can be found in the Asset folder
+| Setting                   | Value    |
+| ------------------------- | -------- |
+| Enable correlation        | `True`   |
+| Person correlation field  | ``       |
+| Account correlation field | `UserId` |
 
-### Remarks
-- Although the connector operates independently, the order of execution is crucial. When using the HelloID Ultimo Employee Connector, make sure to designate the system as a dependent system. This guarantees that the Employee Connector consistently executes before the User Connector. [Read more about Dependent Systems](https://docs.helloid.com/en/provisioning/target-systems/share-account-fields-between-target-systems/access-shared-target-account-fields.html).
-<br>
-- The connector first verifies whether the employee exists. However, this process can vary between instances, depending on whether auto-numbering is enabled. For more information about correlation, please refer to the [Employee Connector remarks](https://github.com/Tools4everBV/HelloID-Conn-Prov-Target-Ultimo-Employee#remarks). The current implementation in the connector assumes that auto-numbering is disabled and that the 'Id' property contains the employee number. If your implementation differs from this, please follow the correlation method described in the employee connector README.
-*Current implementation of the Employee Correlation method:*
+> [!TIP]
+> _For more information on correlation, please refer to our correlation [documentation](https://docs.helloid.com/en/provisioning/target-systems/powershell-v2-target-systems/correlation.html) pages_.
 
-  ```Powershell
-    $splatInvoke = @{
-        uri    = "$($actionContext.Configuration.BaseUrl)/api/v1/object/Employee('$($actionContext.Data.EmployeeId)')"
-        Method = 'GET'
-    }
-    $employee = Invoke-Ultimo-UserRestMethod @splatInvoke -Verbose:$false
-  ```
-  <br>
-- The EmployeeId of a user account cannot be updated.
+### Field mapping
 
-- To determine whether a user should be updated, we created a custom comparison object because of the differences between the request and the response body of the API. Please keep this in mind when adding extra properties to the account object, and ensure that any added properties are also included in the comparison object. This applies to both the create.ps1 and update.ps1 scripts.
-  ```Powershell
-        $previousAccount = [PSCustomObject]@{
-            ExternalAccountName = $user.ExternalAccountName
-            UserDescription     = $user.Description
-        }
-  ```
-- The connector does not support having the exact same name for both a configuration group and an authorization groups.
-- The Configuration mapping file should map the "HelloID" Job Title or possibly any other value to an Ultimo Configuration Group. *(The current implementation uses the primary contract (Title.Code))*
-- The connector manages two types of permissions. First, there is a Configuration Group, which can be viewed as a user type or template. In addition to the Configuration Group, you can also add one or more Authorization groups.
-  - **Configuration Groups** are managed directly in the `create.ps1` and `update.ps1` scripts since a configuration group is mandatory when creating a new User account. You can only apply a single configuration at a time.
-  - **Authorization groups** are managed with entitlements.
-- Ultimo does have a retention period for active and deactivated accounts. Normally, you cannot deactivate an account that was recently activated; the cooldown period is typically 10 days. This cannot be resolved within the connector itself, so to prevent errors, you should keep this in mind while configuring the business rules.
+The field mapping can be imported by using the _fieldMapping.json_ file.
 
+### Account Reference
 
-## Setup the connector
+The account reference is populated with the Ultimo user property `id`.
 
-> _How to setup the connector in HelloID._ Are special settings required. Like the _primary manager_ settings for a source connector.
+## Remarks
+
+### Execution order with Employee connector
+
+Although the connector operates independently, the order of execution is crucial. When using the HelloID Ultimo Employee Connector, configure the system as a dependent system so the Employee Connector always executes before the User Connector.
+
+For more information, see [Dependent Systems](https://docs.helloid.com/en/provisioning/target-systems/share-account-fields-between-target-systems/access-shared-target-account-fields.html).
+
+### Employee correlation behavior
+
+The connector first validates whether the employee exists. This can vary between environments, depending on whether auto-numbering is enabled.
+
+The current implementation assumes auto-numbering is disabled and that the `Id` property contains the employee number.
+
+```powershell
+$splatInvoke = @{
+    Uri    = "$($actionContext.Configuration.BaseUrl)/api/v1/object/Employee('$($actionContext.Data.EmployeeId)')"
+    Method = 'GET'
+}
+$employee = Invoke-UltimoUserRestMethod @splatInvoke -Verbose:$false
+```
+
+If your implementation differs, follow the correlation method described in the [Employee Connector README](https://github.com/Tools4everBV/HelloID-Conn-Prov-Target-Ultimo-Employee#remarks).
+
+### EmployeeId cannot be updated
+
+The `EmployeeId` of a user account cannot be updated.
+
+### Custom comparison object for update logic
+
+To determine whether a user should be updated, this connector uses a custom comparison object because the API request and response bodies differ.
+
+When adding extra account properties, include them in this comparison object in both `create.ps1` and `update.ps1`.
+
+```powershell
+$previousAccount = [PSCustomObject]@{
+    ExternalAccountName = $user.ExternalAccountName
+    UserDescription     = $user.Description
+}
+```
+
+### Configuration and authorization group naming
+
+The connector does not support using exactly the same name for both a configuration group and an authorization group.
+
+### Configuration mapping behavior
+
+The configuration mapping file maps a HelloID value (currently primary contract `Title.Code`) to an Ultimo configuration group.
+
+### Permission model
+
+The connector manages two permission types:
+
+- Configuration Groups are managed directly in `create.ps1` and `update.ps1` because a configuration group is mandatory when creating a new user account. Only one configuration can be applied at a time.
+- Authorization Groups are managed with entitlements (`permissions/groups` scripts).
+
+### Ultimo retention period
+
+Ultimo has a retention period for active and deactivated accounts. Normally, you cannot deactivate an account that was recently activated (typically 10 days). This cannot be solved in the connector itself, so account lifecycle rules should account for this cooldown period.
+
+## Development resources
+
+### API endpoints
+
+The following endpoints are used by the connector.
+
+| Endpoint                                          | HTTP Method | Description                                                           |
+| ------------------------------------------------- | ----------- | --------------------------------------------------------------------- |
+| `/api/v1/object/Employee('{EmployeeId}')`         | GET         | Validate whether the referenced employee exists in Ultimo             |
+| `/api/v1/action/_ExternalAuthorizationManagement` | POST        | Action endpoint for user lifecycle and authorization group management |
+
+### API documentation
+
+Not available.
 
 ## Getting help
 
 > [!TIP]
 > _For more information on how to configure a HelloID PowerShell connector, please refer to our [documentation](https://docs.helloid.com/en/provisioning/target-systems/powershell-v2-target-systems.html) pages_.
-
-> [!TIP]
->  _If you need help, feel free to ask questions on our [forum](https://forum.helloid.com/forum/helloid-connectors/provisioning/4953-helloid-conn-prov-target-ultimo-employee)_.
 
 ## HelloID docs
 
