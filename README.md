@@ -24,6 +24,8 @@
     - [Execution order with Employee connector](#execution-order-with-employee-connector)
     - [Employee correlation behavior](#employee-correlation-behavior)
     - [EmployeeId cannot be updated](#employeeid-cannot-be-updated)
+    - [Characters in the EmployeeId](#characters-in-the-employeeid)
+    - [Language of Ultimo messages](#language-of-ultimo-messages)
     - [Custom comparison object for update logic](#custom-comparison-object-for-update-logic)
     - [Configuration and authorization group naming](#configuration-and-authorization-group-naming)
     - [Configuration group mapping](#configuration-group-mapping)
@@ -74,6 +76,7 @@ https://raw.githubusercontent.com/Tools4everBV/HelloID-Conn-Prov-Target-Ultimo-U
 - Assistance from an Ultimo consultant is required to enable and configure this custom interface.
 - The connector relies on the existence of an Ultimo employee. Employee creation can be managed using the [Employee Connector](https://github.com/Tools4everBV/HelloID-Conn-Prov-Target-Ultimo-Employee) or another synchronization method.
 - The Ultimo configuration group is determined in the field mapping (`GroupId`), see [Configuration group mapping](#configuration-group-mapping).
+- When the API key is configured for multiple Ultimo companies, Ultimo requires the `Ultimo-Company` header. The connector does not send this header, so use an API key that is configured for a single company.
 
 ### Connection settings
 
@@ -143,6 +146,14 @@ If your implementation differs, follow the correlation method described in the [
 ### EmployeeId cannot be updated
 
 The `EmployeeId` of a user account cannot be updated. It is therefore only mapped for _Create_.
+
+### Characters in the EmployeeId
+
+The `EmployeeId` is used in the route of the Ultimo API (`Employee('{EmployeeId}')`). Ultimo does not accept the characters `/ < > * % & : \ ?` in an Id that is used in the route. `create.ps1` therefore stops with a clear error when the `EmployeeId` contains one of these characters.
+
+### Language of Ultimo messages
+
+The connector recognizes that a user does not exist by the English message `User {UserId} not found.` that Ultimo returns. Ultimo returns messages in the language of the system user linked to the API key (see the `Accept-Language` header in the [Ultimo documentation](https://developer.ultimo.net/api-guide/rest)). When that user uses another language, the connector can no longer recognize a missing user and reports an error instead. Make sure the system user of the API key uses English.
 
 ### Custom comparison object for update logic
 

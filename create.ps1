@@ -162,6 +162,10 @@ try {
     if ([string]::IsNullOrEmpty($actionContext.Data.EmployeeId)) {
         throw 'Mandatory attribute [account.EmployeeId] is empty. Please make sure it is correctly mapped'
     }
+    # Ultimo does not accept these characters in an Id that is used in the route of the API
+    if ($actionContext.Data.EmployeeId -match '[/<>*%&:\\?]') {
+        throw "Attribute [account.EmployeeId] with value [$($actionContext.Data.EmployeeId)] contains a character that Ultimo does not accept in an Id: / < > * % & : \ ?"
+    }
     if ([string]::IsNullOrEmpty($actionContext.Data.GroupId)) {
         throw 'Mandatory attribute [account.GroupId] is empty. Please make sure it is correctly mapped to an existing Ultimo Configuration Group'
     }
