@@ -59,12 +59,10 @@ function Invoke-UltimoUserRestMethod {
                         $statusCode = [int]$errorRecord.Exception.Response.StatusCode
                     }
                     $errorBody = "$($errorRecord.ErrorDetails)"
-                    if ([string]::IsNullOrEmpty($errorBody) -and $errorRecord.Exception -is [System.Net.WebException] -and $null -ne $errorRecord.Exception.Response) {
-                        # Windows PowerShell does not fill ErrorDetails. Read the response body once and store it, so Resolve-UltimoUserError can still use it
+                    if ([string]::IsNullOrEmpty($errorBody) -and $errorRecord.Exception.GetType().FullName -eq 'System.Net.WebException' -and $null -ne $errorRecord.Exception.Response) {
+                        # Windows PowerShell does not fill ErrorDetails. Read the response body once and keep it on the exception, so Resolve-UltimoUserError can still use it
                         $errorBody = [System.IO.StreamReader]::new($errorRecord.Exception.Response.GetResponseStream()).ReadToEnd()
-                        if (-not [string]::IsNullOrWhiteSpace($errorBody)) {
-                            $errorRecord.ErrorDetails = [System.Management.Automation.ErrorDetails]::new($errorBody)
-                        }
+                        $errorRecord.Exception.Data['ResponseBody'] = $errorBody
                     }
                     $isTooManyRequests = (($statusCode -eq 429) -or ($errorBody -match 'TooManyRequests')) -and ($errorBody -match '10 seconds')
                     if ($isTooManyRequests -and $retryCount -lt $maxRetries) {
@@ -106,6 +104,11 @@ function Resolve-UltimoUserError {
         if ($ErrorObject.ErrorDetails) {
             $httpErrorObj.ErrorDetails = $ErrorObject.ErrorDetails
             $httpErrorObj.FriendlyMessage = $ErrorObject.ErrorDetails
+            $webResponse = $true
+        }
+        elseif (-not [string]::IsNullOrWhiteSpace($ErrorObject.Exception.Data['ResponseBody'])) {
+            $httpErrorObj.ErrorDetails = $ErrorObject.Exception.Data['ResponseBody']
+            $httpErrorObj.FriendlyMessage = $ErrorObject.Exception.Data['ResponseBody']
             $webResponse = $true
         }
         elseif ((-not($null -eq $ErrorObject.Exception.Response) -and $ErrorObject.Exception.GetType().FullName -eq 'System.Net.WebException')) {

@@ -59,12 +59,10 @@ function Invoke-UltimoUserRestMethod {
                         $statusCode = [int]$errorRecord.Exception.Response.StatusCode
                     }
                     $errorBody = "$($errorRecord.ErrorDetails)"
-                    if ([string]::IsNullOrEmpty($errorBody) -and $errorRecord.Exception -is [System.Net.WebException] -and $null -ne $errorRecord.Exception.Response) {
-                        # Windows PowerShell does not fill ErrorDetails. Read the response body once and store it, so Resolve-UltimoUserError can still use it
+                    if ([string]::IsNullOrEmpty($errorBody) -and $errorRecord.Exception.GetType().FullName -eq 'System.Net.WebException' -and $null -ne $errorRecord.Exception.Response) {
+                        # Windows PowerShell does not fill ErrorDetails. Read the response body once and keep it on the exception, so Resolve-UltimoUserError can still use it
                         $errorBody = [System.IO.StreamReader]::new($errorRecord.Exception.Response.GetResponseStream()).ReadToEnd()
-                        if (-not [string]::IsNullOrWhiteSpace($errorBody)) {
-                            $errorRecord.ErrorDetails = [System.Management.Automation.ErrorDetails]::new($errorBody)
-                        }
+                        $errorRecord.Exception.Data['ResponseBody'] = $errorBody
                     }
                     $isTooManyRequests = (($statusCode -eq 429) -or ($errorBody -match 'TooManyRequests')) -and ($errorBody -match '10 seconds')
                     if ($isTooManyRequests -and $retryCount -lt $maxRetries) {
@@ -106,6 +104,11 @@ function Resolve-UltimoUserError {
         if ($ErrorObject.ErrorDetails) {
             $httpErrorObj.ErrorDetails = $ErrorObject.ErrorDetails
             $httpErrorObj.FriendlyMessage = $ErrorObject.ErrorDetails
+            $webResponse = $true
+        }
+        elseif (-not [string]::IsNullOrWhiteSpace($ErrorObject.Exception.Data['ResponseBody'])) {
+            $httpErrorObj.ErrorDetails = $ErrorObject.Exception.Data['ResponseBody']
+            $httpErrorObj.FriendlyMessage = $ErrorObject.Exception.Data['ResponseBody']
             $webResponse = $true
         }
         elseif ((-not($null -eq $ErrorObject.Exception.Response) -and $ErrorObject.Exception.GetType().FullName -eq 'System.Net.WebException')) {
@@ -174,8 +177,8 @@ try {
     $correlatedAccount = Get-UltimoUser -UserId $actionContext.References.Account
 
     $actionMessage = 'calculating changes'
-    $actionList = [System.Collections.Generic.List[string]]::new()
-    $propertiesChanged = [System.Collections.Generic.List[string]]::new()
+    $actionList = @()
+    $propertiesChanged = @()
     if ($null -ne $correlatedAccount) {
         # The request and response of the API use different property names, so a custom object is used to compare
         $currentAccount = [PSCustomObject]@{
@@ -193,24 +196,24 @@ try {
         foreach ($property in $currentAccount.PSObject.Properties.Name) {
             if ($actionContext.Data.PSObject.Properties.Name -contains $property) {
                 if ("$($actionContext.Data.$property)" -ne "$($currentAccount.$property)") {
-                    $propertiesChanged.Add($property)
+                    $propertiesChanged += $property
                 }
             }
         }
         if ($propertiesChanged.Count -gt 0) {
-            $actionList.Add('UpdateAccount')
+            $actionList += 'UpdateAccount'
         }
 
         if (-not [string]::IsNullOrEmpty($actionContext.Data.GroupId) -and $correlatedAccount.ConfigurationGroup.sgroname -ne $actionContext.Data.GroupId) {
-            $actionList.Add('UpdateConfiguration')
+            $actionList += 'UpdateConfiguration'
         }
 
         if ($actionList.Count -eq 0) {
-            $actionList.Add('NoChanges')
+            $actionList += 'NoChanges'
         }
     }
     else {
-        $actionList.Add('NotFound')
+        $actionList += 'NotFound'
     }
     Write-Information "Determined action(s): $($actionList -join ', ')"
 
