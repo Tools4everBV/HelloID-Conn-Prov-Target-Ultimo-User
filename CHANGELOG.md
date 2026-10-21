@@ -19,7 +19,7 @@ All notable changes to this project will be documented in this file. The format 
 - Request bodies are sent as UTF-8
 - `UserId` and `UserDescription` are stored in the account data
 - Disable, Revoke and Delete report a user that cannot be found as successful
-- `GroupId` field mapping is a complex mapping with an example title to configuration group mapping
+- `GroupId` field mapping is a complex mapping with an example title to configuration group mapping, and is mapped for _Create_ only. Mapping it for _Update_ replaces the configuration group of existing users, which can cause them to lose rights. The README contains a warning
 - `UserDescription` field mapping is a complex mapping that generates the display name from the name convention, instead of the HelloID display name
 
 ### Fixed
