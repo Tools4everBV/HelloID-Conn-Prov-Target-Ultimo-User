@@ -99,7 +99,7 @@ function Resolve-UltimoUserError {
 #endregion functions
 
 try {
-    Write-Information 'Starting import permissions script: retrieving Ultimo-User authorization groups as permissions'
+    Write-Information 'Starting import permissions script'
 
     $actionMessage = 'querying authorization groups'
     $getAuthorizationGroupsSplatParams = @{
@@ -110,7 +110,7 @@ try {
             } | ConvertTo-Json)
     }
     $retrievedPermissions = (Invoke-UltimoUserRestMethod @getAuthorizationGroupsSplatParams).properties.AllAvailableAuthorizationGroups
-    Write-Information "Import permissions script: queried authorization groups. Result count: $(($retrievedPermissions | Measure-Object).Count)"
+    Write-Information "Queried authorization groups. Result count: $(($retrievedPermissions | Measure-Object).Count)"
 
     $actionMessage = 'outputting authorization groups as permissions to HelloID'
     foreach ($permission in $retrievedPermissions) {
@@ -123,7 +123,7 @@ try {
             }
         )
     }
-    Write-Information "Completed import permissions script. Imported [$(($retrievedPermissions | Measure-Object).Count)] authorization groups as permissions"
+    Write-Information "Completed import permissions script. Result count: $(($retrievedPermissions | Measure-Object).Count)"
 }
 catch {
     $ex = $PSItem

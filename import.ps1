@@ -99,7 +99,7 @@ function Resolve-UltimoUserError {
 #endregion functions
 
 try {
-    Write-Information 'Starting import accounts script: retrieving Ultimo-User accounts'
+    Write-Information 'Starting import accounts script'
 
     $actionMessage = 'querying accounts'
     $getAllUsersSplatParams = @{
@@ -110,7 +110,7 @@ try {
             } | ConvertTo-Json)
     }
     $existingAccounts = (Invoke-UltimoUserRestMethod @getAllUsersSplatParams).properties.AllUsers
-    Write-Information "Import accounts script: queried accounts. Result count: $(($existingAccounts | Measure-Object).Count)"
+    Write-Information "Queried accounts. Result count: $(($existingAccounts | Measure-Object).Count)"
 
     $importedAccounts = 0
     foreach ($account in $existingAccounts) {
@@ -147,7 +147,7 @@ try {
         }
         $importedAccounts++
     }
-    Write-Information "Completed import accounts script. Imported [$($importedAccounts)] accounts"
+    Write-Information "Completed import accounts script. Result count: $($importedAccounts)"
 }
 catch {
     $ex = $PSItem

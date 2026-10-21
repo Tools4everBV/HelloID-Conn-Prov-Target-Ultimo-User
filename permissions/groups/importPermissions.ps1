@@ -99,7 +99,7 @@ function Resolve-UltimoUserError {
 #endregion functions
 
 try {
-    Write-Information 'Starting import permission memberships script: retrieving which accounts are member of which Ultimo-User authorization groups'
+    Write-Information 'Starting import permission memberships script'
 
     $actionMessage = 'querying accounts'
     $getAllUsersSplatParams = @{
@@ -110,7 +110,7 @@ try {
             } | ConvertTo-Json)
     }
     $existingAccounts = (Invoke-UltimoUserRestMethod @getAllUsersSplatParams).properties.AllUsers
-    Write-Information "Import permission memberships script: queried accounts. Result count: $(($existingAccounts | Measure-Object).Count)"
+    Write-Information "Queried accounts. Result count: $(($existingAccounts | Measure-Object).Count)"
 
     $actionMessage = 'querying authorization groups'
     $getAuthorizationGroupsSplatParams = @{
@@ -121,7 +121,7 @@ try {
             } | ConvertTo-Json)
     }
     $retrievedPermissions = (Invoke-UltimoUserRestMethod @getAuthorizationGroupsSplatParams).properties.AllAvailableAuthorizationGroups
-    Write-Information "Import permission memberships script: queried authorization groups. Result count: $(($retrievedPermissions | Measure-Object).Count)"
+    Write-Information "Queried authorization groups. Result count: $(($retrievedPermissions | Measure-Object).Count)"
 
     $permissionsGrouped = $retrievedPermissions | Group-Object -Property 'GroupId' -AsHashTable -AsString
 
@@ -149,7 +149,7 @@ try {
             $importedPermissions++
         }
     }
-    Write-Information "Completed import permission memberships script. Imported [$($importedPermissions)] permission memberships"
+    Write-Information "Completed import permission memberships script. Result count: $($importedPermissions)"
 }
 catch {
     $ex = $PSItem
