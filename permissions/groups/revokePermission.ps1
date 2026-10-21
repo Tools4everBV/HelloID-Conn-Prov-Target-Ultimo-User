@@ -1,7 +1,6 @@
 #################################################
 # HelloID-Conn-Prov-Target-Ultimo-User-RevokePermission-Group
 # PowerShell V2
-# HelloID script: Revoke action script
 #################################################
 
 # Enable TLS1.2

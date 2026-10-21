@@ -1,7 +1,6 @@
 ############################################################
 # HelloID-Conn-Prov-Target-Ultimo-User-Import
 # PowerShell V2
-# HelloID script: Import accounts script
 ############################################################
 
 # Enable TLS1.2

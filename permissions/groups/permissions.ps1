@@ -1,7 +1,6 @@
 #################################################
 # HelloID-Conn-Prov-Target-Ultimo-User-Permissions-Group
 # PowerShell V2
-# HelloID script: Import permissions script
 #################################################
 
 # Enable TLS1.2
