@@ -70,7 +70,7 @@
     },
     {
       "Name": "GroupId",
-      "Description": "The Ultimo Configuration Group, only used when creating the account. Do not map this for Update, see the README. The example maps a title code to a Configuration Group, with a fallback for all other titles.",
+      "Description": "The Ultimo Configuration Group. Mapped for Create by default. It can also be mapped for Update, but that replaces the configuration group of existing users and can cause them to lose rights, so only do this consciously, see the README. The example maps a title code to a Configuration Group, with a fallback for all other titles.",
       "Type": "Text",
       "MappingActions": [
         {

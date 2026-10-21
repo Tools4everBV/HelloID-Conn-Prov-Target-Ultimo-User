@@ -109,7 +109,7 @@ All customer-specific logic, such as the mapping of a title to a configuration g
 | `UserId`              | Create, Update | Stored in the account data. Used as correlation field                                                                                                                |
 | `ExternalAccountName` | Create, Update |                                                                                                                                                                      |
 | `UserDescription`     | Create, Update | Stored in the account data. Complex mapping that generates the display name. Optionally add a Delete mapping for the soft-delete, see [Delete behavior](#delete-behavior) |
-| `GroupId`             | Create         | The Ultimo configuration group. Not mapped for Update on purpose, see [Configuration group mapping](#configuration-group-mapping)                                    |
+| `GroupId`             | Create         | The Ultimo configuration group. Mapped for Create by default. Mapping it for Update is possible, but carries a risk, see [Configuration group mapping](#configuration-group-mapping)                                    |
 
 ### Account Reference
 
@@ -165,7 +165,7 @@ The connector does not support using exactly the same name for both a configurat
 The `GroupId` field mapping determines the Ultimo configuration group of a new user. A configuration group is mandatory when creating a user. The default mapping is a complex mapping that maps the primary contract `Title.Code` to a configuration group, with the key `*ALL` as fallback for all other titles. Adjust the example in `fieldMapping.json` to the configuration groups of the customer.
 
 > [!WARNING]
-> **`GroupId` is mapped for _Create_ only, and should not be mapped for _Update_ without careful consideration.**
+> **`GroupId` is mapped for _Create_ by default. It can also be mapped for _Update_, but do this consciously.**
 >
 > The configuration group is the default group of an employee and determines the basic rights of the user in Ultimo. When `GroupId` is mapped for _Update_, the connector replaces the current configuration group of every existing user with the result of the mapping. This can have a large impact:
 >
