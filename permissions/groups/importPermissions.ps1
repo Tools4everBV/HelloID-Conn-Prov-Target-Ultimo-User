@@ -1,5 +1,5 @@
 ############################################################
-# HelloID-Conn-Prov-Target-Ultimo-User-Permissions-Group-Import
+# HelloID-Conn-Prov-Target-Ultimo-User-ImportPermissions-Group
 # PowerShell V2
 ############################################################
 
@@ -29,34 +29,31 @@ function Invoke-UltimoUserRestMethod {
     process {
         try {
             $headers = @{
-                APIKey               = $actionContext.Configuration.APIKey
+                APIKey               = $actionContext.Configuration.ApiKey
                 ApplicationElementId = $actionContext.Configuration.ApplicationElementId
             }
             $splatParams = @{
                 Uri         = $Uri
-                Headers     = $Headers
+                Headers     = $headers
                 Method      = $Method
                 ContentType = $ContentType
             }
             if ($Body) {
-                $splatParams['Body'] = $Body
+                $splatParams['Body'] = [System.Text.Encoding]::UTF8.GetBytes($Body)
             }
-            
             $response = Invoke-RestMethod @splatParams -Verbose:$false
-            
-            if ( $response.properties.ResponseSummary.Succes -eq $false) {
-                Write-Warning ($response.properties.ResponseSummary | ConvertTo-Json)
+            if ($response.properties.ResponseSummary.Succes -eq $false) {
                 throw $response.properties.ResponseSummary.Message
             }
-            
-            return $response
-        } catch {
+            Write-Output $response
+        }
+        catch {
             $PSCmdlet.ThrowTerminatingError($_)
         }
     }
 }
 
-function Resolve-Ultimo-UserError {
+function Resolve-UltimoUserError {
     [CmdletBinding()]
     param (
         [Parameter(Mandatory)]
@@ -71,84 +68,91 @@ function Resolve-Ultimo-UserError {
             FriendlyMessage  = $ErrorObject.Exception.Message
         }
         $webResponse = $false
-        try {
-            if ($ErrorObject.ErrorDetails) {
-                $httpErrorObj.ErrorDetails = $ErrorObject.ErrorDetails
-                $httpErrorObj.FriendlyMessage = $ErrorObject.ErrorDetails
+        if ($ErrorObject.ErrorDetails) {
+            $httpErrorObj.ErrorDetails = $ErrorObject.ErrorDetails
+            $httpErrorObj.FriendlyMessage = $ErrorObject.ErrorDetails
+            $webResponse = $true
+        }
+        elseif ((-not($null -eq $ErrorObject.Exception.Response) -and $ErrorObject.Exception.GetType().FullName -eq 'System.Net.WebException')) {
+            $streamReaderResponse = [System.IO.StreamReader]::new($ErrorObject.Exception.Response.GetResponseStream()).ReadToEnd()
+            if (-not([string]::IsNullOrWhiteSpace($streamReaderResponse))) {
+                $httpErrorObj.ErrorDetails = $streamReaderResponse
+                $httpErrorObj.FriendlyMessage = $streamReaderResponse
                 $webResponse = $true
-            } elseif ((-not($null -eq $ErrorObject.Exception.Response) -and $ErrorObject.Exception.GetType().FullName -eq 'System.Net.WebException')) {
-                $streamReaderResponse = [System.IO.StreamReader]::new($ErrorObject.Exception.Response.GetResponseStream()).ReadToEnd()
-                if (-not([string]::IsNullOrWhiteSpace($streamReaderResponse))) {
-                    $httpErrorObj.ErrorDetails = $streamReaderResponse
-                    $httpErrorObj.FriendlyMessage = $streamReaderResponse
-                    $webResponse = $true
+            }
+        }
+        if ($webResponse) {
+            try {
+                $convertedErrorObject = ($httpErrorObj.FriendlyMessage | ConvertFrom-Json)
+                if (-not [string]::IsNullOrEmpty($convertedErrorObject.Message)) {
+                    $httpErrorObj.FriendlyMessage = $convertedErrorObject.Message
                 }
             }
-            if ($webResponse ) {
-                $responseObject = $httpErrorObj.ErrorDetails | ConvertFrom-Json
-                $httpErrorObj.FriendlyMessage = $responseObject.Message
+            catch {
+                Write-Warning "Unexpected web service response, Error during Json conversion: $($_.Exception.Message)"
             }
-        } catch {
-            $httpErrorObj.FriendlyMessage = "Received an unexpected response. The JSON could not be converted, error: [$($_.Exception.Message)]. Original error from web service: [$($ErrorObject.ErrorDetails)]"
         }
         Write-Output $httpErrorObj
     }
 }
-#endregion
+#endregion functions
 
 try {
-	Write-Information 'Starting target permission import'  
-	
-    Write-Information 'Retrieving users'
-    $splatInvoke = @{
-        uri    = "$($actionContext.Configuration.BaseUrl)/api/v1/action/_ExternalAuthorizationManagement"
+    Write-Information 'Starting import of Ultimo-User authorization group permissions'
+
+    $actionMessage = 'querying accounts'
+    $getAllUsersSplatParams = @{
+        Uri    = "$($actionContext.Configuration.BaseUrl)/api/v1/action/_ExternalAuthorizationManagement"
         Method = 'POST'
-        Body   = ( @{
+        Body   = (@{
                 Action = 'GetAllUsers'
             } | ConvertTo-Json)
     }
+    $existingAccounts = (Invoke-UltimoUserRestMethod @getAllUsersSplatParams).properties.AllUsers
+    Write-Information "Queried accounts. Result count: $(($existingAccounts | Measure-Object).Count)"
 
-    $getAllUserResponse = Invoke-UltimoUserRestMethod  @splatInvoke -Verbose:$false
-    $existingAccounts = $getAllUserResponse.properties.AllUsers
-
-    Write-Information 'Retrieving permissions'
-    $splatInvoke = @{
-        uri    = "$($actionContext.Configuration.BaseUrl)/api/v1/action/_ExternalAuthorizationManagement"
+    $actionMessage = 'querying authorization groups'
+    $getAuthorizationGroupsSplatParams = @{
+        Uri    = "$($actionContext.Configuration.BaseUrl)/api/v1/action/_ExternalAuthorizationManagement"
         Method = 'POST'
-        Body   = ( @{
+        Body   = (@{
                 Action = 'GetAllAuthorizationGroups'
             } | ConvertTo-Json)
     }
-    $GetAllAuthorizationGroupsResponse = (Invoke-UltimoUserRestMethod  @splatInvoke -Verbose:$false)
-    $retrievedPermissions = $GetAllAuthorizationGroupsResponse.properties.AllAvailableAuthorizationGroups
+    $retrievedPermissions = (Invoke-UltimoUserRestMethod @getAuthorizationGroupsSplatParams).properties.AllAvailableAuthorizationGroups
+    Write-Information "Queried authorization groups. Result count: $(($retrievedPermissions | Measure-Object).Count)"
 
-    $permissionsGrouped = $retrievedPermissions | Group-Object "GroupId" -AsHashTable
+    $permissionsGrouped = $retrievedPermissions | Group-Object -Property 'GroupId' -AsHashTable -AsString
 
-    $existingAccounts  | Add-Member -MemberType NoteProperty -Name 'UserDescription' -Value $null
-    $existingAccounts  | Add-Member -MemberType NoteProperty -Name 'UserId' -Value $null
-
+    $importedPermissions = 0
     foreach ($account in $existingAccounts) {
-        
-        foreach ($group in $account.AuthorizationGroups){
-            if($group.sgrousegroid -ne $account.ConfigurationGroup.sgroname) {
+        $actionMessage = "processing authorization groups of account with UserId [$($account.Id)]"
 
-                $permission = @{
-                    PermissionReference = @{
-                        Id = $group.sgrousegroid
-                    }       
-                    DisplayName         = $permissionsGrouped[$($group.sgrousegroid)].GroupName
-                    AccountReferences = @($account.id)
-                }
-
-                # Return the result
-                Write-Output $permission
+        foreach ($group in $account.AuthorizationGroups) {
+            # The configuration group is also returned as authorization group, which is not a permission
+            if ($group.sgrousegroid -eq $account.ConfigurationGroup.sgroname) {
+                continue
             }
+            # Only return permissions that are also retrieved by permissions.ps1, HelloID cannot link anything else
+            if (-not $permissionsGrouped.ContainsKey([string]$group.sgrousegroid)) {
+                continue
+            }
+
+            Write-Output @{
+                PermissionReference = @{
+                    Reference = "$($group.sgrousegroid)"
+                }
+                DisplayName         = "$($permissionsGrouped[[string]$group.sgrousegroid].GroupName)"
+                AccountReferences   = @("$($account.Id)")
+            }
+            $importedPermissions++
         }
     }
-    Write-Information 'Target permission import completed'
-} catch {
+    Write-Information "Completed import of Ultimo-User authorization group permissions. Result count: $($importedPermissions)"
+}
+catch {
     $ex = $PSItem
-    $errorObj = Resolve-Ultimo-UserError -ErrorObject $ex
-    Write-Warning "Could not retrieve Ultimo-User users. Error: $($errorObj.FriendlyMessage)"
+    $errorObj = Resolve-UltimoUserError -ErrorObject $ex
     Write-Warning "Error at Line '$($errorObj.ScriptLineNumber)': $($errorObj.Line). Error: $($errorObj.ErrorDetails)"
+    Write-Error "Error $($actionMessage). Error: $($errorObj.FriendlyMessage)"
 }
