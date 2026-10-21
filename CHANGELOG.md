@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file. The format 
 ## [2.0.0] - 21-10-2026
 
 ### Added
-- `delete.ps1`: Ultimo does not support deleting a user, so Delete is a soft-delete that updates the fields mapped for the _Delete_ action. The default field mapping prefixes the `UserDescription` with `uitdienst_`
+- `delete.ps1`: Ultimo does not support deleting a user, so Delete is a soft-delete that updates the fields mapped for the _Delete_ action. No field is mapped for _Delete_ by default; the README describes an example, such as prefixing the `UserDescription`
 - Governance reconciliation resolution for Delete
 - README: sections for the configuration group mapping, delete behavior, governance reconciliation resolutions, script conventions and a field mapping overview
 
@@ -20,6 +20,7 @@ All notable changes to this project will be documented in this file. The format 
 - `UserId` and `UserDescription` are stored in the account data
 - Disable, Revoke and Delete report a user that cannot be found as successful
 - `GroupId` field mapping is a complex mapping with an example title to configuration group mapping
+- `UserDescription` field mapping is a complex mapping that generates the display name from the name convention, instead of the HelloID display name
 
 ### Fixed
 - The message that is checked for a user that is not found during Create used an empty value, so a non-existing user could result in an error instead of a new account

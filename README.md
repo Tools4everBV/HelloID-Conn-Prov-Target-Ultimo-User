@@ -108,7 +108,7 @@ All customer-specific logic, such as the mapping of a title to a configuration g
 | `EmployeeId`          | Create, Update         | The Ultimo employee the user belongs to                                       |
 | `UserId`              | Create, Update         | Stored in the account data. Used as correlation field                         |
 | `ExternalAccountName` | Create, Update         |                                                                               |
-| `UserDescription`     | Create, Update, Delete | Stored in the account data. The Delete mapping is used for the soft-delete    |
+| `UserDescription`     | Create, Update         | Stored in the account data. Complex mapping that generates the display name. Optionally add a Delete mapping for the soft-delete, see [Delete behavior](#delete-behavior) |
 | `GroupId`             | Create, Update         | The Ultimo configuration group, see [Configuration group mapping](#configuration-group-mapping) |
 
 ### Account Reference
@@ -169,7 +169,16 @@ The `GroupId` field mapping determines the Ultimo configuration group. The defau
 
 ### Delete behavior
 
-Ultimo does not support deleting a user. Delete is therefore a soft-delete: the fields that are mapped for the _Delete_ action in the field mapping are updated. The default mapping prefixes the `UserDescription` with `uitdienst_`, so a deleted user remains recognizable in Ultimo.
+Ultimo does not support deleting a user. Delete is therefore a soft-delete: the fields that are mapped for the _Delete_ action in the field mapping are updated. The default field mapping does not map any field for _Delete_, so by default nothing is changed.
+
+To make a deleted user recognizable in Ultimo, add a _Delete_ mapping to a field. For example, a complex mapping on `UserDescription` that prefixes the description:
+
+```javascript
+function getValue() {
+    return 'uitdienst_' + Person.DisplayName;
+}
+getValue();
+```
 
 - When no fields are mapped for _Delete_, the user is left unchanged and this is reported in the audit log.
 - When the user no longer exists, Delete is reported as successful.
