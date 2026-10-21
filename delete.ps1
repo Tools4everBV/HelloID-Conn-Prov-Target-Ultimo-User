@@ -44,7 +44,8 @@ function Invoke-UltimoUserRestMethod {
                 $splatParams['Body'] = [System.Text.Encoding]::UTF8.GetBytes($Body)
             }
 
-            # Ultimo allows a maximum of 100 requests per 10 seconds. When exceeded (HTTP 429), wait for the next window and retry
+            # Ultimo allows a maximum of 100 requests per 10 seconds. When that limit is exceeded (HTTP 429), wait for the next window and retry.
+            # The daily quota is not retried, because waiting 10 seconds does not help. Only the message of the 10 seconds limit is known, so only that message is retried
             $maxRetries = 3
             $retryDelayInSeconds = 10
             $retryCount = 0
@@ -54,18 +55,27 @@ function Invoke-UltimoUserRestMethod {
                     break
                 }
                 catch {
+                    $errorRecord = $_
                     $statusCode = $null
-                    if ($null -ne $_.Exception.Response) {
-                        $statusCode = [int]$_.Exception.Response.StatusCode
+                    if ($null -ne $errorRecord.Exception.Response) {
+                        $statusCode = [int]$errorRecord.Exception.Response.StatusCode
                     }
-                    $isTooManyRequests = ($statusCode -eq 429) -or ("$($_.ErrorDetails)" -match 'TooManyRequests')
+                    $errorBody = "$($errorRecord.ErrorDetails)"
+                    if ([string]::IsNullOrEmpty($errorBody) -and $errorRecord.Exception -is [System.Net.WebException] -and $null -ne $errorRecord.Exception.Response) {
+                        # Windows PowerShell does not fill ErrorDetails. Read the response body once and store it, so Resolve-UltimoUserError can still use it
+                        $errorBody = [System.IO.StreamReader]::new($errorRecord.Exception.Response.GetResponseStream()).ReadToEnd()
+                        if (-not [string]::IsNullOrWhiteSpace($errorBody)) {
+                            $errorRecord.ErrorDetails = [System.Management.Automation.ErrorDetails]::new($errorBody)
+                        }
+                    }
+                    $isTooManyRequests = (($statusCode -eq 429) -or ($errorBody -match 'TooManyRequests')) -and ($errorBody -match '10 seconds')
                     if ($isTooManyRequests -and $retryCount -lt $maxRetries) {
                         $retryCount++
                         Write-Warning "Ultimo API request limit reached (HTTP 429). Retry [$($retryCount)/$($maxRetries)] in [$($retryDelayInSeconds)] seconds"
                         Start-Sleep -Seconds $retryDelayInSeconds
                     }
                     else {
-                        throw
+                        throw $errorRecord
                     }
                 }
             }
