@@ -3,13 +3,12 @@
   "MappingFields": [
     {
       "Name": "EmployeeId",
-      "Description": "",
+      "Description": "The Ultimo employee the user belongs to. Only used when creating the account, because it cannot be updated.",
       "Type": "Text",
       "MappingActions": [
         {
           "MapForActions": [
-            "Create",
-            "Update"
+            "Create"
           ],
           "MappingMode": "Field",
           "Value": "\"Person.ExternalId\"",

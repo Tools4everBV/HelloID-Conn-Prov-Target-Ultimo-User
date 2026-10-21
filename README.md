@@ -48,14 +48,14 @@ The connector can be utilized in conjunction with the [Employee Connector](https
 
 The following features are available:
 
-| Feature                                   | Supported | Actions                         | Remarks                             |
-| ----------------------------------------- | --------- | ------------------------------- | ----------------------------------- |
+| Feature                                   | Supported | Actions                                 | Remarks                                                          |
+| ----------------------------------------- | --------- | --------------------------------------- | ---------------------------------------------------------------- |
 | **Account Lifecycle**                     | ✅         | Create, Update, Enable, Disable, Delete | Delete is a soft-delete, see [Delete behavior](#delete-behavior) |
-| **Permissions**                           | ✅         | Retrieve, Grant, Revoke         | Authorization Groups (entitlements) |
-| **Resources**                             | ❌         | -                               |                                     |
-| **Entitlement Import: Accounts**          | ✅         | -                               |                                     |
-| **Entitlement Import: Permissions**       | ✅         | -                               |                                     |
-| **Governance Reconciliation Resolutions** | ✅         | Disable, Delete, Revoke         | Delete is a soft-delete             |
+| **Permissions**                           | ✅         | Import, Grant, Revoke                   | Authorization Groups (entitlements)                              |
+| **Resources**                             | ❌         | -                                       |                                                                  |
+| **Entitlement Import: Accounts**          | ✅         | -                                       |                                                                  |
+| **Entitlement Import: Permissions**       | ✅         | -                                       |                                                                  |
+| **Governance Reconciliation Resolutions** | ✅         | Disable, Delete, Revoke                 | Delete is a soft-delete                                          |
 
 ## Getting started
 
@@ -101,15 +101,15 @@ The correlation configuration is used to specify which properties will be used t
 
 The field mapping can be imported by using the _fieldMapping.json_ file.
 
-All customer-specific logic, such as the mapping of a title to a configuration group or the description of a deleted user, belongs in the field mapping. The scripts are generic.
+All customer-specific logic, such as the mapping of a title to a configuration group or the generation of the user description, belongs in the field mapping. The scripts are generic.
 
-| Field                 | Actions                | Remarks                                                                       |
-| --------------------- | ---------------------- | ----------------------------------------------------------------------------- |
-| `EmployeeId`          | Create, Update         | The Ultimo employee the user belongs to                                       |
-| `UserId`              | Create, Update         | Stored in the account data. Used as correlation field                         |
-| `ExternalAccountName` | Create, Update         |                                                                               |
-| `UserDescription`     | Create, Update         | Stored in the account data. Complex mapping that generates the display name. Optionally add a Delete mapping for the soft-delete, see [Delete behavior](#delete-behavior) |
-| `GroupId`             | Create                 | The Ultimo configuration group. Not mapped for Update on purpose, see [Configuration group mapping](#configuration-group-mapping) |
+| Field                 | Actions        | Remarks                                                                                                                                                              |
+| --------------------- | -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `EmployeeId`          | Create         | The Ultimo employee the user belongs to. Not mapped for Update, see [EmployeeId cannot be updated](#employeeid-cannot-be-updated)                                   |
+| `UserId`              | Create, Update | Stored in the account data. Used as correlation field                                                                                                                |
+| `ExternalAccountName` | Create, Update |                                                                                                                                                                      |
+| `UserDescription`     | Create, Update | Stored in the account data. Complex mapping that generates the display name. Optionally add a Delete mapping for the soft-delete, see [Delete behavior](#delete-behavior) |
+| `GroupId`             | Create         | The Ultimo configuration group. Not mapped for Update on purpose, see [Configuration group mapping](#configuration-group-mapping)                                    |
 
 ### Account Reference
 
@@ -130,18 +130,18 @@ The connector first validates whether the employee exists. This can vary between
 The current implementation assumes auto-numbering is disabled and that the `Id` property contains the employee number.
 
 ```powershell
-$splatInvoke = @{
+$getEmployeeSplatParams = @{
     Uri    = "$($actionContext.Configuration.BaseUrl)/api/v1/object/Employee('$($actionContext.Data.EmployeeId)')"
     Method = 'GET'
 }
-$employee = Invoke-UltimoUserRestMethod @splatInvoke -Verbose:$false
+$null = Invoke-UltimoUserRestMethod @getEmployeeSplatParams
 ```
 
 If your implementation differs, follow the correlation method described in the [Employee Connector README](https://github.com/Tools4everBV/HelloID-Conn-Prov-Target-Ultimo-Employee#remarks).
 
 ### EmployeeId cannot be updated
 
-The `EmployeeId` of a user account cannot be updated.
+The `EmployeeId` of a user account cannot be updated. It is therefore only mapped for _Create_.
 
 ### Custom comparison object for update logic
 
@@ -231,6 +231,8 @@ Not available.
 - Each action sets `$actionMessage` before every step, so the audit log shows what was being done when an error occurred.
 - Every script contains the same `Invoke-UltimoUserRestMethod` and `Resolve-UltimoUserError` functions. Scripts that look up a user also contain `Get-UltimoUser`, which returns `$null` when the user does not exist.
 - A user that cannot be found is an error for Update, Enable and Grant. For Disable, Delete and Revoke it is reported as successful, as there is nothing left to do.
+- Log and audit messages refer to an existing account as `account with AccountReference: [...]`.
+- The import scripts log `Starting …` and `Completed …` with the name of the HelloID script (for example `Starting import permissions script`). The messages in between describe what the script is doing.
 
 ## Getting help
 
