@@ -26,12 +26,15 @@
     - [EmployeeId cannot be updated](#employeeid-cannot-be-updated)
     - [Custom comparison object for update logic](#custom-comparison-object-for-update-logic)
     - [Configuration and authorization group naming](#configuration-and-authorization-group-naming)
-    - [Configuration mapping behavior](#configuration-mapping-behavior)
+    - [Configuration group mapping](#configuration-group-mapping)
+    - [Delete behavior](#delete-behavior)
     - [Permission model](#permission-model)
+    - [Governance reconciliation resolutions](#governance-reconciliation-resolutions)
     - [Ultimo retention period](#ultimo-retention-period)
   - [Development resources](#development-resources)
     - [API endpoints](#api-endpoints)
     - [API documentation](#api-documentation)
+    - [Script conventions](#script-conventions)
   - [Getting help](#getting-help)
   - [HelloID docs](#helloid-docs)
 
@@ -47,12 +50,12 @@ The following features are available:
 
 | Feature                                   | Supported | Actions                         | Remarks                             |
 | ----------------------------------------- | --------- | ------------------------------- | ----------------------------------- |
-| **Account Lifecycle**                     | ✅         | Create, Update, Enable, Disable | Delete is not available             |
+| **Account Lifecycle**                     | ✅         | Create, Update, Enable, Disable, Delete | Delete is a soft-delete, see [Delete behavior](#delete-behavior) |
 | **Permissions**                           | ✅         | Retrieve, Grant, Revoke         | Authorization Groups (entitlements) |
 | **Resources**                             | ❌         | -                               |                                     |
 | **Entitlement Import: Accounts**          | ✅         | -                               |                                     |
 | **Entitlement Import: Permissions**       | ✅         | -                               |                                     |
-| **Governance Reconciliation Resolutions** | ✅         | Disable, Revoke                 | Delete is not available             |
+| **Governance Reconciliation Resolutions** | ✅         | Disable, Delete, Revoke         | Delete is a soft-delete             |
 
 ## Getting started
 
@@ -69,7 +72,7 @@ https://raw.githubusercontent.com/Tools4everBV/HelloID-Conn-Prov-Target-Ultimo-U
 - Ultimo does not provide a standard interface for user management in all environments. This connector relies on a custom API interface provided by an Ultimo implementation partner.
 - Assistance from an Ultimo consultant is required to enable and configure this custom interface.
 - The connector relies on the existence of an Ultimo employee. Employee creation can be managed using the [Employee Connector](https://github.com/Tools4everBV/HelloID-Conn-Prov-Target-Ultimo-Employee) or another synchronization method.
-- A mapping CSV file is required to determine the Ultimo configuration group. An example is available in `assets/ConfigurationMapping.csv`.
+- The Ultimo configuration group is determined in the field mapping (`GroupId`), see [Configuration group mapping](#configuration-group-mapping).
 
 ### Connection settings
 
@@ -80,7 +83,6 @@ The following settings are required to connect to the API.
 | BaseUrl                | The URL to the API                                                                    | Yes       |
 | ApiKey                 | The ApiKey to connect to the API                                                      | Yes       |
 | Application Element Id | The ApplicationElementId to connect to the API (required for all user-related action) | Yes       |
-| Mapping File Path      | The file path of the configuration mapping CSV file                                   | Yes       |
 
 ### Correlation configuration
 
@@ -98,6 +100,16 @@ The correlation configuration is used to specify which properties will be used t
 ### Field mapping
 
 The field mapping can be imported by using the _fieldMapping.json_ file.
+
+All customer-specific logic, such as the mapping of a title to a configuration group or the description of a deleted user, belongs in the field mapping. The scripts are generic.
+
+| Field                 | Actions                | Remarks                                                                       |
+| --------------------- | ---------------------- | ----------------------------------------------------------------------------- |
+| `EmployeeId`          | Create, Update         | The Ultimo employee the user belongs to                                       |
+| `UserId`              | Create, Update         | Stored in the account data. Used as correlation field                         |
+| `ExternalAccountName` | Create, Update         |                                                                               |
+| `UserDescription`     | Create, Update, Delete | Stored in the account data. The Delete mapping is used for the soft-delete    |
+| `GroupId`             | Create, Update         | The Ultimo configuration group, see [Configuration group mapping](#configuration-group-mapping) |
 
 ### Account Reference
 
@@ -133,14 +145,14 @@ The `EmployeeId` of a user account cannot be updated.
 
 ### Custom comparison object for update logic
 
-To determine whether a user should be updated, this connector uses a custom comparison object because the API request and response bodies differ.
+To determine whether a user should be updated, this connector uses a custom comparison object because the API request and response bodies differ. Only properties that are mapped for _Update_ are compared, and `null` and empty values are treated as equal.
 
-When adding extra account properties, include them in this comparison object in both `create.ps1` and `update.ps1`.
+When adding extra account properties, include them in this comparison object in `update.ps1`.
 
 ```powershell
-$previousAccount = [PSCustomObject]@{
-    ExternalAccountName = $user.ExternalAccountName
-    UserDescription     = $user.Description
+$currentAccount = [PSCustomObject]@{
+    ExternalAccountName = $correlatedAccount.ExternalAccountName
+    UserDescription     = $correlatedAccount.Description
 }
 ```
 
@@ -148,16 +160,32 @@ $previousAccount = [PSCustomObject]@{
 
 The connector does not support using exactly the same name for both a configuration group and an authorization group.
 
-### Configuration mapping behavior
+### Configuration group mapping
 
-The configuration mapping file maps a HelloID value (currently primary contract `Title.Code`) to an Ultimo configuration group.
+The `GroupId` field mapping determines the Ultimo configuration group. The default mapping is a complex mapping that maps the primary contract `Title.Code` to a configuration group, with the key `*ALL` as fallback for all other titles. Adjust the example in `fieldMapping.json` to the configuration groups of the customer.
+
+> [!IMPORTANT]
+> The CSV mapping file (`mappingFilePath`) that was used before version 2.0.0 is no longer supported. Move its content to the `GroupId` field mapping.
+
+### Delete behavior
+
+Ultimo does not support deleting a user. Delete is therefore a soft-delete: the fields that are mapped for the _Delete_ action in the field mapping are updated. The default mapping prefixes the `UserDescription` with `uitdienst_`, so a deleted user remains recognizable in Ultimo.
+
+- When no fields are mapped for _Delete_, the user is left unchanged and this is reported in the audit log.
+- When the user no longer exists, Delete is reported as successful.
+- The configuration group (`GroupId`) is never part of the soft-delete.
+- Delete does not disable the account, this is handled by the _Disable_ action.
 
 ### Permission model
 
 The connector manages two permission types:
 
-- Configuration Groups are managed directly in `create.ps1` and `update.ps1` because a configuration group is mandatory when creating a new user account. Only one configuration can be applied at a time.
-- Authorization Groups are managed with entitlements (`permissions/groups` scripts).
+- Configuration Groups are managed directly in `create.ps1` and `update.ps1` through the `GroupId` field mapping, because a configuration group is mandatory when creating a new user account. Only one configuration can be applied at a time.
+- Authorization Groups are managed with entitlements (`permissions/groups` scripts). The configuration group of a user is not returned as a permission when importing permissions.
+
+### Governance reconciliation resolutions
+
+The connector supports the _Disable_, _Delete_ and _Revoke_ resolutions. _Delete_ is a soft-delete, see [Delete behavior](#delete-behavior).
 
 ### Ultimo retention period
 
@@ -177,6 +205,12 @@ The following endpoints are used by the connector.
 ### API documentation
 
 Not available.
+
+### Script conventions
+
+- Each action sets `$actionMessage` before every step, so the audit log shows what was being done when an error occurred.
+- Every script contains the same `Invoke-UltimoUserRestMethod` and `Resolve-UltimoUserError` functions. Scripts that look up a user also contain `Get-UltimoUser`, which returns `$null` when the user does not exist.
+- A user that cannot be found is an error for Update, Enable and Grant. For Disable, Delete and Revoke it is reported as successful, as there is nothing left to do.
 
 ## Getting help
 
