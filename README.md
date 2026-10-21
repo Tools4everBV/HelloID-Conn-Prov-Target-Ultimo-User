@@ -81,8 +81,8 @@ The following settings are required to connect to the API.
 | Setting                | Description                                                                           | Mandatory |
 | ---------------------- | ------------------------------------------------------------------------------------- | --------- |
 | BaseUrl                | The URL to the API                                                                    | Yes       |
-| ApiKey                 | The ApiKey to connect to the API                                                      | Yes       |
 | Application Element Id | The ApplicationElementId to connect to the API (required for all user-related action) | Yes       |
+| ApiKey                 | The ApiKey to connect to the API                                                      | Yes       |
 
 ### Correlation configuration
 

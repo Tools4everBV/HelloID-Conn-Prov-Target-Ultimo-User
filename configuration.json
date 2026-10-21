@@ -11,17 +11,6 @@
         }
     },
     {
-        "key": "ApiKey",
-        "type": "input",
-        "defaultValue": "",
-        "templateOptions": {
-            "type": "password",
-            "label": "ApiKey",
-            "description": "The ApiKey to connect to the Ultimo API. Provided by the Ultimo consultant.",
-            "required": true
-        }
-    },
-    {
         "key": "ApplicationElementId",
         "type": "input",
         "defaultValue": "",
@@ -29,6 +18,17 @@
             "type": "password",
             "label": "ApplicationElementId",
             "description": "The ApplicationElementId to connect to the Ultimo API. Required for all user-related actions. Provided by the Ultimo consultant.",
+            "required": true
+        }
+    },
+    {
+        "key": "ApiKey",
+        "type": "input",
+        "defaultValue": "",
+        "templateOptions": {
+            "type": "password",
+            "label": "ApiKey",
+            "description": "The ApiKey to connect to the Ultimo API. Provided by the Ultimo consultant.",
             "required": true
         }
     }
