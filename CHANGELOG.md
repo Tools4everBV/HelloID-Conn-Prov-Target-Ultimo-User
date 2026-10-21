@@ -12,7 +12,6 @@ All notable changes to this project will be documented in this file. The format 
 ### Changed
 - **BREAKING**: The configuration group is determined by the `GroupId` field mapping. Move the content of the CSV mapping file to the `GroupId` field mapping, see the example in `fieldMapping.json`
 - **BREAKING**: `GroupId` is mapped for _Create_ only. Mapping it for _Update_ replaces the configuration group of existing users, which can cause them to lose rights. The README contains a warning
-- **BREAKING**: `importPermissions.ps1` returns `Reference` as permission reference, matching the `Reference` returned by `permissions.ps1`. This was `Id` before
 - `EmployeeId` is mapped for _Create_ only, because it cannot be updated
 - `UserDescription` field mapping is a complex mapping that generates the display name from the name convention, instead of the HelloID display name
 - `UserId` and `UserDescription` are stored in the account data
