@@ -31,7 +31,7 @@
           "MappingMode": "Complex",
           "Value": "\"function getValue() {\\n    return Person.Accounts.MicrosoftActiveDirectory.sAMAccountName\\n}\\ngetValue();\"",
           "UsedInNotifications": false,
-          "StoreInAccountData": false
+          "StoreInAccountData": true
         }
       ]
     },
@@ -54,7 +54,7 @@
     },
     {
       "Name": "UserDescription",
-      "Description": "",
+      "Description": "The description of the user. On Delete the user is soft-deleted, because Ultimo does not support deleting a user.",
       "Type": "Text",
       "MappingActions": [
         {
@@ -65,13 +65,22 @@
           "MappingMode": "Field",
           "Value": "\"Person.DisplayName\"",
           "UsedInNotifications": false,
-          "StoreInAccountData": false
+          "StoreInAccountData": true
+        },
+        {
+          "MapForActions": [
+            "Delete"
+          ],
+          "MappingMode": "Complex",
+          "Value": "\"function getValue() {\\r\\n    return 'uitdienst_' + Person.DisplayName;\\r\\n}\\r\\ngetValue();\"",
+          "UsedInNotifications": false,
+          "StoreInAccountData": true
         }
       ]
     },
     {
       "Name": "GroupId",
-      "Description": "",
+      "Description": "The Ultimo Configuration Group. The example maps a title code to a Configuration Group, with a fallback for all other titles.",
       "Type": "Text",
       "MappingActions": [
         {
@@ -79,8 +88,8 @@
             "Create",
             "Update"
           ],
-          "MappingMode": "Field",
-          "Value": "\"Person.PrimaryContract.Title.Code\"",
+          "MappingMode": "Complex",
+          "Value": "\"function getGroupId(titleCode) {\\r\\n    // Example mapping, replace with the title codes and Configuration Groups of the customer\\r\\n    const mapping = {\\r\\n        '*ALL': 'ESSENTIALS',\\r\\n        'MANA': 'BUILDING',\\r\\n        'SALES': 'BUILDING'\\r\\n    };\\r\\n\\r\\n    return mapping[titleCode] || mapping['*ALL'];\\r\\n}\\r\\n\\r\\ngetGroupId(Person.PrimaryContract.Title.Code);\"",
           "UsedInNotifications": false,
           "StoreInAccountData": false
         }

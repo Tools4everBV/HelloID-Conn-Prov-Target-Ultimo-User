@@ -31,16 +31,5 @@
             "placeholder": "https://MyUltimoEnvironment.ultimo.net",
             "required": true
         }
-    },
-    {
-        "key": "mappingFilePath",
-        "type": "input",
-        "defaultValue": "",
-        "templateOptions": {
-            "label": "mappingFilePath",
-            "description": "The mappingFilePath to the Configuration Mapping.",
-            "placeholder": "C:\\Ultimo\\ConfigurationMapping.csv",
-            "required": true
-        }
     }
 ]
