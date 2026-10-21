@@ -1,6 +1,7 @@
 ############################################################
 # HelloID-Conn-Prov-Target-Ultimo-User-Import
 # PowerShell V2
+# HelloID script: Import accounts script
 ############################################################
 
 # Enable TLS1.2
@@ -98,7 +99,7 @@ function Resolve-UltimoUserError {
 #endregion functions
 
 try {
-    Write-Information 'Starting import of Ultimo-User accounts'
+    Write-Information 'Starting import accounts script: retrieving Ultimo-User accounts'
 
     $actionMessage = 'querying accounts'
     $getAllUsersSplatParams = @{
@@ -109,7 +110,7 @@ try {
             } | ConvertTo-Json)
     }
     $existingAccounts = (Invoke-UltimoUserRestMethod @getAllUsersSplatParams).properties.AllUsers
-    Write-Information "Queried accounts. Result count: $(($existingAccounts | Measure-Object).Count)"
+    Write-Information "Import accounts script: queried accounts. Result count: $(($existingAccounts | Measure-Object).Count)"
 
     $importedAccounts = 0
     foreach ($account in $existingAccounts) {
@@ -146,7 +147,7 @@ try {
         }
         $importedAccounts++
     }
-    Write-Information "Completed import of Ultimo-User accounts. Result count: $($importedAccounts)"
+    Write-Information "Completed import accounts script. Imported [$($importedAccounts)] accounts"
 }
 catch {
     $ex = $PSItem

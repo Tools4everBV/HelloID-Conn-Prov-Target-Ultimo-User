@@ -1,6 +1,7 @@
 #################################################
 # HelloID-Conn-Prov-Target-Ultimo-User-Permissions-Group
 # PowerShell V2
+# HelloID script: Import permissions script
 #################################################
 
 # Enable TLS1.2
@@ -98,7 +99,7 @@ function Resolve-UltimoUserError {
 #endregion functions
 
 try {
-    Write-Information 'Starting retrieval of Ultimo-User authorization group permissions'
+    Write-Information 'Starting import permissions script: retrieving Ultimo-User authorization groups as permissions'
 
     $actionMessage = 'querying authorization groups'
     $getAuthorizationGroupsSplatParams = @{
@@ -109,7 +110,7 @@ try {
             } | ConvertTo-Json)
     }
     $retrievedPermissions = (Invoke-UltimoUserRestMethod @getAuthorizationGroupsSplatParams).properties.AllAvailableAuthorizationGroups
-    Write-Information "Queried authorization groups. Result count: $(($retrievedPermissions | Measure-Object).Count)"
+    Write-Information "Import permissions script: queried authorization groups. Result count: $(($retrievedPermissions | Measure-Object).Count)"
 
     $actionMessage = 'outputting authorization groups as permissions to HelloID'
     foreach ($permission in $retrievedPermissions) {
@@ -122,7 +123,7 @@ try {
             }
         )
     }
-    Write-Information "Completed retrieval of Ultimo-User authorization group permissions. Result count: $(($retrievedPermissions | Measure-Object).Count)"
+    Write-Information "Completed import permissions script. Imported [$(($retrievedPermissions | Measure-Object).Count)] authorization groups as permissions"
 }
 catch {
     $ex = $PSItem
