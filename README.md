@@ -30,6 +30,7 @@
     - [Delete behavior](#delete-behavior)
     - [Permission model](#permission-model)
     - [Governance reconciliation resolutions](#governance-reconciliation-resolutions)
+    - [API limits and quotas](#api-limits-and-quotas)
     - [Ultimo retention period](#ultimo-retention-period)
   - [Development resources](#development-resources)
     - [API endpoints](#api-endpoints)
@@ -207,6 +208,26 @@ The connector manages two permission types:
 
 The connector supports the _Disable_, _Delete_ and _Revoke_ resolutions. _Delete_ is a soft-delete, see [Delete behavior](#delete-behavior).
 
+### API limits and quotas
+
+Ultimo limits the use of its REST API. The limits apply to all API keys combined, so they are shared with other integrations, such as the Employee connector. See the [Ultimo documentation on limits and quotas](https://developer.ultimo.net/api-guide/rest/limits-and-quotas). The limits can change, so check the documentation for the current values.
+
+| Limit                                 | Value                                  | Behavior of the connector                                                                      |
+| ------------------------------------- | -------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| Requests per 10 seconds               | 100 (all API keys combined)            | The connector waits 10 seconds and retries a maximum of 3 times, see below                      |
+| Requests per day                      | 10,000 (all API keys combined)         | Cannot be handled by the connector, the action fails until the quota resets. Plan around it    |
+| Maximum payload per request           | 1 MB                                   | Not an issue for the requests of this connector                                                |
+
+When the limit per 10 seconds is exceeded, Ultimo returns HTTP 429 with the following message:
+
+```json
+{ "message": "Too many requests. A maximum of 100 requests per 10 seconds are allowed. Try again later.", "code": "TooManyRequests" }
+```
+
+- **Retry:** every request in the connector retries a maximum of 3 times after a 429, with a delay of 10 seconds (the length of the window). Every retry is logged as a warning. When the limit is still exceeded after the last retry, the action fails and HelloID retries it in the next run.
+- **Concurrent actions:** set the number of concurrent actions of the target system in HelloID to `1`. A higher number makes it likely that the limit is exceeded, because the actions run in parallel and each retry counts as a request.
+- **Daily quota:** the quota of 10,000 requests per day cannot be increased. A create costs 3 requests, an update 1 to 3, enable, disable and delete 2 each, and grant and revoke 2 per permission. Spread an initial load of many users over multiple days or run it outside working hours. It is possible to set a daily quota per API key in Ultimo, so the connector, the Employee connector and other parties do not block each other.
+- **Payload too large:** HTTP 413 and 400 (batch size) are not retried, the request is reported as failed. The connector does not use batch requests.
 ### Ultimo retention period
 
 Ultimo has a retention period for active and deactivated accounts. Normally, you cannot deactivate an account that was recently activated (typically 10 days). This cannot be solved in the connector itself, so account lifecycle rules should account for this cooldown period.

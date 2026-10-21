@@ -7,6 +7,7 @@ All notable changes to this project will be documented in this file. The format 
 ### Added
 - `delete.ps1`: Ultimo does not support deleting a user, so Delete is a soft-delete that updates the fields mapped for the _Delete_ action. No field is mapped for _Delete_ by default; the README describes an example, such as prefixing the `UserDescription`
 - Governance reconciliation resolution for Delete
+- Retry for requests that exceed the Ultimo limit of 100 requests per 10 seconds (HTTP 429): a maximum of 3 retries with a delay of 10 seconds, and a README section on the API limits and quotas
 - README: sections for the configuration group mapping, delete behavior, governance reconciliation resolutions, script conventions and a field mapping overview
 
 ### Changed

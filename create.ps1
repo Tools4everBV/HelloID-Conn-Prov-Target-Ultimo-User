@@ -41,7 +41,32 @@ function Invoke-UltimoUserRestMethod {
             if ($Body) {
                 $splatParams['Body'] = [System.Text.Encoding]::UTF8.GetBytes($Body)
             }
-            $response = Invoke-RestMethod @splatParams -Verbose:$false
+
+            # Ultimo allows a maximum of 100 requests per 10 seconds. When exceeded (HTTP 429), wait for the next window and retry
+            $maxRetries = 3
+            $retryDelayInSeconds = 10
+            $retryCount = 0
+            while ($true) {
+                try {
+                    $response = Invoke-RestMethod @splatParams -Verbose:$false
+                    break
+                }
+                catch {
+                    $statusCode = $null
+                    if ($null -ne $_.Exception.Response) {
+                        $statusCode = [int]$_.Exception.Response.StatusCode
+                    }
+                    $isTooManyRequests = ($statusCode -eq 429) -or ("$($_.ErrorDetails)" -match 'TooManyRequests')
+                    if ($isTooManyRequests -and $retryCount -lt $maxRetries) {
+                        $retryCount++
+                        Write-Warning "Ultimo API request limit reached (HTTP 429). Retry [$($retryCount)/$($maxRetries)] in [$($retryDelayInSeconds)] seconds"
+                        Start-Sleep -Seconds $retryDelayInSeconds
+                    }
+                    else {
+                        throw
+                    }
+                }
+            }
             if ($response.properties.ResponseSummary.Succes -eq $false) {
                 throw $response.properties.ResponseSummary.Message
             }
