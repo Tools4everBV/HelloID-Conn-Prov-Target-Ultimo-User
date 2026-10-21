@@ -203,7 +203,7 @@ try {
 
                 $outputContext.AuditLogs.Add([PSCustomObject]@{
                         Action  = 'CreateAccount'
-                        Message = "Created account with UserId [$($outputContext.AccountReference)] and Configuration Group [$($actionContext.Data.GroupId)]. AccountReference is: [$($outputContext.AccountReference)]"
+                        Message = "Created account with AccountReference: [$($outputContext.AccountReference)] and Configuration Group [$($actionContext.Data.GroupId)]"
                         IsError = $false
                     })
             }
@@ -227,7 +227,7 @@ try {
 
             $outputContext.AuditLogs.Add([PSCustomObject]@{
                     Action  = 'CorrelateAccount'
-                    Message = "Correlated account with UserId [$($correlatedAccount.id)] on field [$($correlationField)] with value [$($correlationValue)]"
+                    Message = "Correlated account with AccountReference: [$($correlatedAccount.id)] on field [$($correlationField)] with value [$($correlationValue)]"
                     IsError = $false
                 })
             break

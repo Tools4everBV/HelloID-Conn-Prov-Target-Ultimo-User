@@ -137,7 +137,7 @@ try {
         throw 'The account reference could not be found'
     }
 
-    $actionMessage = "querying account with UserId [$($actionContext.References.Account)]"
+    $actionMessage = "querying account with AccountReference: [$($actionContext.References.Account)]"
     $correlatedAccount = Get-UltimoUser -UserId $actionContext.References.Account
 
     $actionMessage = 'determining action'
@@ -157,7 +157,7 @@ try {
     # Process
     switch ($action) {
         'DeleteAccount' {
-            $actionMessage = "soft-deleting account with UserId [$($actionContext.References.Account)]"
+            $actionMessage = "soft-deleting account with AccountReference: [$($actionContext.References.Account)]"
 
             $deleteAccountBody = $actionContext.Data | Select-Object * -ExcludeProperty GroupId
             $deleteAccountBody | Add-Member -NotePropertyMembers @{
@@ -186,34 +186,34 @@ try {
 
                 $outputContext.AuditLogs.Add([PSCustomObject]@{
                         Action  = 'DeleteAccount'
-                        Message = "Soft-deleted account with UserId [$($actionContext.References.Account)]. Fields updated: [$($fieldsToUpdate -join ', ')]"
+                        Message = "Soft-deleted account with AccountReference: [$($actionContext.References.Account)]. Fields updated: [$($fieldsToUpdate -join ', ')]"
                         IsError = $false
                     })
             }
             else {
-                Write-Information "[DryRun] Would soft-delete account with UserId [$($actionContext.References.Account)]. Fields to update: [$($fieldsToUpdate -join ', ')]"
+                Write-Information "[DryRun] Would soft-delete account with AccountReference: [$($actionContext.References.Account)]. Fields to update: [$($fieldsToUpdate -join ', ')]"
             }
             break
         }
 
         'NoFieldsMapped' {
-            $actionMessage = "soft-deleting account with UserId [$($actionContext.References.Account)]"
+            $actionMessage = "soft-deleting account with AccountReference: [$($actionContext.References.Account)]"
 
             $outputContext.AuditLogs.Add([PSCustomObject]@{
                     Action  = 'DeleteAccount'
-                    Message = "No fields are mapped for the Delete action, so account with UserId [$($actionContext.References.Account)] is not changed. Ultimo does not support deleting a user"
+                    Message = "No fields are mapped for the Delete action, so account with AccountReference: [$($actionContext.References.Account)] is not changed. Ultimo does not support deleting a user"
                     IsError = $false
                 })
             break
         }
 
         'NotFound' {
-            $actionMessage = "soft-deleting account with UserId [$($actionContext.References.Account)]"
+            $actionMessage = "soft-deleting account with AccountReference: [$($actionContext.References.Account)]"
 
             # Nothing to delete when the account no longer exists, so this is not treated as an error
             $outputContext.AuditLogs.Add([PSCustomObject]@{
                     Action  = 'DeleteAccount'
-                    Message = "Account with UserId [$($actionContext.References.Account)] for person [$($personContext.Person.DisplayName)] could not be found, possibly indicating that it is already deleted, or the account is not correlated"
+                    Message = "Account with AccountReference: [$($actionContext.References.Account)] for person [$($personContext.Person.DisplayName)] could not be found, possibly indicating that it is already deleted, or the account is not correlated"
                     IsError = $false
                 })
             break

@@ -135,7 +135,7 @@ try {
         throw 'The account reference could not be found'
     }
 
-    $actionMessage = "querying account with UserId [$($actionContext.References.Account)]"
+    $actionMessage = "querying account with AccountReference: [$($actionContext.References.Account)]"
     $correlatedAccount = Get-UltimoUser -UserId $actionContext.References.Account
 
     $actionMessage = 'calculating changes'
@@ -183,7 +183,7 @@ try {
     foreach ($action in $actionList) {
         switch ($action) {
             'UpdateAccount' {
-                $actionMessage = "updating account with UserId [$($actionContext.References.Account)]"
+                $actionMessage = "updating account with AccountReference: [$($actionContext.References.Account)]"
 
                 # The configuration group is updated separately, so it is not part of the update body
                 $updateAccountBody = $actionContext.Data | Select-Object * -ExcludeProperty GroupId
@@ -202,18 +202,18 @@ try {
 
                     $outputContext.AuditLogs.Add([PSCustomObject]@{
                             Action  = 'UpdateAccount'
-                            Message = "Updated account with UserId [$($actionContext.References.Account)]. Properties updated: [$($propertiesChanged -join ', ')]"
+                            Message = "Updated account with AccountReference: [$($actionContext.References.Account)]. Properties updated: [$($propertiesChanged -join ', ')]"
                             IsError = $false
                         })
                 }
                 else {
-                    Write-Information "[DryRun] Would update account with UserId [$($actionContext.References.Account)]. Properties to update: [$($propertiesChanged -join ', ')]"
+                    Write-Information "[DryRun] Would update account with AccountReference: [$($actionContext.References.Account)]. Properties to update: [$($propertiesChanged -join ', ')]"
                 }
                 break
             }
 
             'UpdateConfiguration' {
-                $actionMessage = "updating Configuration Group of account with UserId [$($actionContext.References.Account)] to [$($actionContext.Data.GroupId)]"
+                $actionMessage = "updating Configuration Group of account with AccountReference: [$($actionContext.References.Account)] to [$($actionContext.Data.GroupId)]"
 
                 $updateConfigurationSplatParams = @{
                     Uri    = "$($actionContext.Configuration.BaseUrl)/api/v1/action/_ExternalAuthorizationManagement"
@@ -230,33 +230,33 @@ try {
 
                     $outputContext.AuditLogs.Add([PSCustomObject]@{
                             Action  = 'UpdateAccount'
-                            Message = "Updated Configuration Group of account with UserId [$($actionContext.References.Account)] from [$($correlatedAccount.ConfigurationGroup.sgroname)] to [$($actionContext.Data.GroupId)]"
+                            Message = "Updated Configuration Group of account with AccountReference: [$($actionContext.References.Account)] from [$($correlatedAccount.ConfigurationGroup.sgroname)] to [$($actionContext.Data.GroupId)]"
                             IsError = $false
                         })
                 }
                 else {
-                    Write-Information "[DryRun] Would update Configuration Group of account with UserId [$($actionContext.References.Account)] from [$($correlatedAccount.ConfigurationGroup.sgroname)] to [$($actionContext.Data.GroupId)]"
+                    Write-Information "[DryRun] Would update Configuration Group of account with AccountReference: [$($actionContext.References.Account)] from [$($correlatedAccount.ConfigurationGroup.sgroname)] to [$($actionContext.Data.GroupId)]"
                 }
                 break
             }
 
             'NoChanges' {
-                Write-Information "No changes to account with UserId [$($actionContext.References.Account)]"
+                Write-Information "No changes to account with AccountReference: [$($actionContext.References.Account)]"
 
                 $outputContext.AuditLogs.Add([PSCustomObject]@{
                         Action  = 'UpdateAccount'
-                        Message = "No changes will be made to account with UserId [$($actionContext.References.Account)] because it already corresponds with the account data"
+                        Message = "No changes will be made to account with AccountReference: [$($actionContext.References.Account)] because it already corresponds with the account data"
                         IsError = $false
                     })
                 break
             }
 
             'NotFound' {
-                $actionMessage = "updating account with UserId [$($actionContext.References.Account)]"
+                $actionMessage = "updating account with AccountReference: [$($actionContext.References.Account)]"
 
                 $outputContext.AuditLogs.Add([PSCustomObject]@{
                         Action  = 'UpdateAccount'
-                        Message = "Account with UserId [$($actionContext.References.Account)] for person [$($personContext.Person.DisplayName)] could not be found, possibly indicating that it could be deleted, or the account is not correlated"
+                        Message = "Account with AccountReference: [$($actionContext.References.Account)] for person [$($personContext.Person.DisplayName)] could not be found, possibly indicating that it could be deleted, or the account is not correlated"
                         IsError = $true
                     })
                 break

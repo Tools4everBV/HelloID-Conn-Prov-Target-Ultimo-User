@@ -126,7 +126,7 @@ try {
 
     $importedPermissions = 0
     foreach ($account in $existingAccounts) {
-        $actionMessage = "processing authorization groups of account with UserId [$($account.Id)]"
+        $actionMessage = "processing authorization groups of account with AccountReference: [$($account.Id)]"
 
         foreach ($group in $account.AuthorizationGroups) {
             # The configuration group is also returned as authorization group, which is not a permission

@@ -135,7 +135,7 @@ try {
         throw 'The account reference could not be found'
     }
 
-    $actionMessage = "querying account with UserId [$($actionContext.References.Account)]"
+    $actionMessage = "querying account with AccountReference: [$($actionContext.References.Account)]"
     $correlatedAccount = Get-UltimoUser -UserId $actionContext.References.Account
 
     $actionMessage = 'determining action'
@@ -150,7 +150,7 @@ try {
     # Process
     switch ($action) {
         'DisableAccount' {
-            $actionMessage = "disabling account with UserId [$($actionContext.References.Account)]"
+            $actionMessage = "disabling account with AccountReference: [$($actionContext.References.Account)]"
 
             $disableAccountSplatParams = @{
                 Uri    = "$($actionContext.Configuration.BaseUrl)/api/v1/action/_ExternalAuthorizationManagement"
@@ -168,23 +168,23 @@ try {
 
                 $outputContext.AuditLogs.Add([PSCustomObject]@{
                         Action  = 'DisableAccount'
-                        Message = "Disabled account with UserId [$($actionContext.References.Account)]"
+                        Message = "Disabled account with AccountReference: [$($actionContext.References.Account)]"
                         IsError = $false
                     })
             }
             else {
-                Write-Information "[DryRun] Would disable account with UserId [$($actionContext.References.Account)]"
+                Write-Information "[DryRun] Would disable account with AccountReference: [$($actionContext.References.Account)]"
             }
             break
         }
 
         'NotFound' {
-            $actionMessage = "disabling account with UserId [$($actionContext.References.Account)]"
+            $actionMessage = "disabling account with AccountReference: [$($actionContext.References.Account)]"
 
             # Nothing to disable when the account no longer exists, so this is not treated as an error
             $outputContext.AuditLogs.Add([PSCustomObject]@{
                     Action  = 'DisableAccount'
-                    Message = "Account with UserId [$($actionContext.References.Account)] for person [$($personContext.Person.DisplayName)] could not be found, possibly indicating that it could be deleted, or the account is not correlated"
+                    Message = "Account with AccountReference: [$($actionContext.References.Account)] for person [$($personContext.Person.DisplayName)] could not be found, possibly indicating that it could be deleted, or the account is not correlated"
                     IsError = $false
                 })
             break

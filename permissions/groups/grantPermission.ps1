@@ -135,7 +135,7 @@ try {
         throw 'The account reference could not be found'
     }
 
-    $actionMessage = "querying account with UserId [$($actionContext.References.Account)]"
+    $actionMessage = "querying account with AccountReference: [$($actionContext.References.Account)]"
     $correlatedAccount = Get-UltimoUser -UserId $actionContext.References.Account
 
     $actionMessage = 'determining action'
@@ -153,7 +153,7 @@ try {
     # Process
     switch ($action) {
         'GrantPermission' {
-            $actionMessage = "granting permission [$($actionContext.PermissionDisplayName)] with reference [$($actionContext.References.Permission.Reference)] to account with UserId [$($actionContext.References.Account)]"
+            $actionMessage = "granting permission [$($actionContext.PermissionDisplayName)] with reference [$($actionContext.References.Permission.Reference)] to account with AccountReference: [$($actionContext.References.Account)]"
 
             $grantPermissionSplatParams = @{
                 Uri    = "$($actionContext.Configuration.BaseUrl)/api/v1/action/_ExternalAuthorizationManagement"
@@ -170,33 +170,33 @@ try {
 
                 $outputContext.AuditLogs.Add([PSCustomObject]@{
                         Action  = 'GrantPermission'
-                        Message = "Granted permission [$($actionContext.PermissionDisplayName)] with reference [$($actionContext.References.Permission.Reference)] to account with UserId [$($actionContext.References.Account)]"
+                        Message = "Granted permission [$($actionContext.PermissionDisplayName)] with reference [$($actionContext.References.Permission.Reference)] to account with AccountReference: [$($actionContext.References.Account)]"
                         IsError = $false
                     })
             }
             else {
-                Write-Information "[DryRun] Would grant permission [$($actionContext.PermissionDisplayName)] with reference [$($actionContext.References.Permission.Reference)] to account with UserId [$($actionContext.References.Account)]"
+                Write-Information "[DryRun] Would grant permission [$($actionContext.PermissionDisplayName)] with reference [$($actionContext.References.Permission.Reference)] to account with AccountReference: [$($actionContext.References.Account)]"
             }
             break
         }
 
         'AlreadyGranted' {
-            $actionMessage = "granting permission [$($actionContext.PermissionDisplayName)] to account with UserId [$($actionContext.References.Account)]"
+            $actionMessage = "granting permission [$($actionContext.PermissionDisplayName)] to account with AccountReference: [$($actionContext.References.Account)]"
 
             $outputContext.AuditLogs.Add([PSCustomObject]@{
                     Action  = 'GrantPermission'
-                    Message = "Permission [$($actionContext.PermissionDisplayName)] with reference [$($actionContext.References.Permission.Reference)] is already granted to account with UserId [$($actionContext.References.Account)]"
+                    Message = "Permission [$($actionContext.PermissionDisplayName)] with reference [$($actionContext.References.Permission.Reference)] is already granted to account with AccountReference: [$($actionContext.References.Account)]"
                     IsError = $false
                 })
             break
         }
 
         'NotFound' {
-            $actionMessage = "granting permission [$($actionContext.PermissionDisplayName)] to account with UserId [$($actionContext.References.Account)]"
+            $actionMessage = "granting permission [$($actionContext.PermissionDisplayName)] to account with AccountReference: [$($actionContext.References.Account)]"
 
             $outputContext.AuditLogs.Add([PSCustomObject]@{
                     Action  = 'GrantPermission'
-                    Message = "Account with UserId [$($actionContext.References.Account)] for person [$($personContext.Person.DisplayName)] could not be found, possibly indicating that it could be deleted, or the account is not correlated"
+                    Message = "Account with AccountReference: [$($actionContext.References.Account)] for person [$($personContext.Person.DisplayName)] could not be found, possibly indicating that it could be deleted, or the account is not correlated"
                     IsError = $true
                 })
             break

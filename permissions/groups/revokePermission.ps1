@@ -135,7 +135,7 @@ try {
         throw 'The account reference could not be found'
     }
 
-    $actionMessage = "querying account with UserId [$($actionContext.References.Account)]"
+    $actionMessage = "querying account with AccountReference: [$($actionContext.References.Account)]"
     $correlatedAccount = Get-UltimoUser -UserId $actionContext.References.Account
 
     $actionMessage = 'determining action'
@@ -153,7 +153,7 @@ try {
     # Process
     switch ($action) {
         'RevokePermission' {
-            $actionMessage = "revoking permission [$($actionContext.PermissionDisplayName)] with reference [$($actionContext.References.Permission.Reference)] from account with UserId [$($actionContext.References.Account)]"
+            $actionMessage = "revoking permission [$($actionContext.PermissionDisplayName)] with reference [$($actionContext.References.Permission.Reference)] from account with AccountReference: [$($actionContext.References.Account)]"
 
             $revokePermissionSplatParams = @{
                 Uri    = "$($actionContext.Configuration.BaseUrl)/api/v1/action/_ExternalAuthorizationManagement"
@@ -170,34 +170,34 @@ try {
 
                 $outputContext.AuditLogs.Add([PSCustomObject]@{
                         Action  = 'RevokePermission'
-                        Message = "Revoked permission [$($actionContext.PermissionDisplayName)] with reference [$($actionContext.References.Permission.Reference)] from account with UserId [$($actionContext.References.Account)]"
+                        Message = "Revoked permission [$($actionContext.PermissionDisplayName)] with reference [$($actionContext.References.Permission.Reference)] from account with AccountReference: [$($actionContext.References.Account)]"
                         IsError = $false
                     })
             }
             else {
-                Write-Information "[DryRun] Would revoke permission [$($actionContext.PermissionDisplayName)] with reference [$($actionContext.References.Permission.Reference)] from account with UserId [$($actionContext.References.Account)]"
+                Write-Information "[DryRun] Would revoke permission [$($actionContext.PermissionDisplayName)] with reference [$($actionContext.References.Permission.Reference)] from account with AccountReference: [$($actionContext.References.Account)]"
             }
             break
         }
 
         'AlreadyRevoked' {
-            $actionMessage = "revoking permission [$($actionContext.PermissionDisplayName)] from account with UserId [$($actionContext.References.Account)]"
+            $actionMessage = "revoking permission [$($actionContext.PermissionDisplayName)] from account with AccountReference: [$($actionContext.References.Account)]"
 
             $outputContext.AuditLogs.Add([PSCustomObject]@{
                     Action  = 'RevokePermission'
-                    Message = "Permission [$($actionContext.PermissionDisplayName)] with reference [$($actionContext.References.Permission.Reference)] is already revoked from account with UserId [$($actionContext.References.Account)]"
+                    Message = "Permission [$($actionContext.PermissionDisplayName)] with reference [$($actionContext.References.Permission.Reference)] is already revoked from account with AccountReference: [$($actionContext.References.Account)]"
                     IsError = $false
                 })
             break
         }
 
         'NotFound' {
-            $actionMessage = "revoking permission [$($actionContext.PermissionDisplayName)] from account with UserId [$($actionContext.References.Account)]"
+            $actionMessage = "revoking permission [$($actionContext.PermissionDisplayName)] from account with AccountReference: [$($actionContext.References.Account)]"
 
             # Nothing to revoke when the account no longer exists, so this is not treated as an error
             $outputContext.AuditLogs.Add([PSCustomObject]@{
                     Action  = 'RevokePermission'
-                    Message = "Account with UserId [$($actionContext.References.Account)] for person [$($personContext.Person.DisplayName)] could not be found, possibly indicating that it could be deleted, or the account is not correlated"
+                    Message = "Account with AccountReference: [$($actionContext.References.Account)] for person [$($personContext.Person.DisplayName)] could not be found, possibly indicating that it could be deleted, or the account is not correlated"
                     IsError = $false
                 })
             break

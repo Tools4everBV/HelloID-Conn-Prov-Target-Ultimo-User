@@ -135,7 +135,7 @@ try {
         throw 'The account reference could not be found'
     }
 
-    $actionMessage = "querying account with UserId [$($actionContext.References.Account)]"
+    $actionMessage = "querying account with AccountReference: [$($actionContext.References.Account)]"
     $correlatedAccount = Get-UltimoUser -UserId $actionContext.References.Account
 
     $actionMessage = 'determining action'
@@ -150,7 +150,7 @@ try {
     # Process
     switch ($action) {
         'EnableAccount' {
-            $actionMessage = "enabling account with UserId [$($actionContext.References.Account)]"
+            $actionMessage = "enabling account with AccountReference: [$($actionContext.References.Account)]"
 
             $enableAccountSplatParams = @{
                 Uri    = "$($actionContext.Configuration.BaseUrl)/api/v1/action/_ExternalAuthorizationManagement"
@@ -168,22 +168,22 @@ try {
 
                 $outputContext.AuditLogs.Add([PSCustomObject]@{
                         Action  = 'EnableAccount'
-                        Message = "Enabled account with UserId [$($actionContext.References.Account)]"
+                        Message = "Enabled account with AccountReference: [$($actionContext.References.Account)]"
                         IsError = $false
                     })
             }
             else {
-                Write-Information "[DryRun] Would enable account with UserId [$($actionContext.References.Account)]"
+                Write-Information "[DryRun] Would enable account with AccountReference: [$($actionContext.References.Account)]"
             }
             break
         }
 
         'NotFound' {
-            $actionMessage = "enabling account with UserId [$($actionContext.References.Account)]"
+            $actionMessage = "enabling account with AccountReference: [$($actionContext.References.Account)]"
 
             $outputContext.AuditLogs.Add([PSCustomObject]@{
                     Action  = 'EnableAccount'
-                    Message = "Account with UserId [$($actionContext.References.Account)] for person [$($personContext.Person.DisplayName)] could not be found, possibly indicating that it could be deleted, or the account is not correlated"
+                    Message = "Account with AccountReference: [$($actionContext.References.Account)] for person [$($personContext.Person.DisplayName)] could not be found, possibly indicating that it could be deleted, or the account is not correlated"
                     IsError = $true
                 })
             break

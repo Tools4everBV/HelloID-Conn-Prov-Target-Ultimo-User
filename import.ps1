@@ -113,7 +113,7 @@ try {
 
     $importedAccounts = 0
     foreach ($account in $existingAccounts) {
-        $actionMessage = "processing account with UserId [$($account.Id)]"
+        $actionMessage = "processing account with AccountReference: [$($account.Id)]"
 
         # An account is enabled when it has an activation date
         $enabled = $false
