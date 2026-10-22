@@ -29,30 +29,64 @@ function Invoke-UltimoUserRestMethod {
     process {
         try {
             $headers = @{
-                APIKey               = $actionContext.Configuration.APIKey
+                APIKey               = $actionContext.Configuration.ApiKey
                 ApplicationElementId = $actionContext.Configuration.ApplicationElementId
             }
             $splatParams = @{
                 Uri         = $Uri
-                Headers     = $Headers
+                Headers     = $headers
                 Method      = $Method
                 ContentType = $ContentType
             }
             if ($Body) {
-                $splatParams['Body'] = $Body
+                $splatParams['Body'] = [System.Text.Encoding]::UTF8.GetBytes($Body)
             }
-            $response = Invoke-RestMethod @splatParams -Verbose:$false
-            if ( $response.properties.ResponseSummary.Succes -eq $false) {
-                throw  $response.properties.ResponseSummary.Message
+
+            # Ultimo allows a maximum of 100 requests per 10 seconds. When that limit is exceeded (HTTP 429), wait for the next window and retry.
+            # The daily quota is not retried, because waiting 10 seconds does not help. Only the message of the 10 seconds limit is known, so only that message is retried
+            $maxRetries = 3
+            $retryDelayInSeconds = 10
+            $retryCount = 0
+            while ($true) {
+                try {
+                    $response = Invoke-RestMethod @splatParams -Verbose:$false
+                    break
+                }
+                catch {
+                    $errorRecord = $_
+                    $statusCode = $null
+                    if ($null -ne $errorRecord.Exception.Response) {
+                        $statusCode = [int]$errorRecord.Exception.Response.StatusCode
+                    }
+                    $errorBody = "$($errorRecord.ErrorDetails)"
+                    if ([string]::IsNullOrEmpty($errorBody) -and $errorRecord.Exception.GetType().FullName -eq 'System.Net.WebException' -and $null -ne $errorRecord.Exception.Response) {
+                        # Windows PowerShell does not fill ErrorDetails. Read the response body once and keep it on the exception, so Resolve-UltimoUserError can still use it
+                        $errorBody = [System.IO.StreamReader]::new($errorRecord.Exception.Response.GetResponseStream()).ReadToEnd()
+                        $errorRecord.Exception.Data['ResponseBody'] = $errorBody
+                    }
+                    $isTooManyRequests = (($statusCode -eq 429) -or ($errorBody -match 'TooManyRequests')) -and ($errorBody -match '10 seconds')
+                    if ($isTooManyRequests -and $retryCount -lt $maxRetries) {
+                        $retryCount++
+                        Write-Warning "Ultimo API request limit reached (HTTP 429). Retry [$($retryCount)/$($maxRetries)] in [$($retryDelayInSeconds)] seconds"
+                        Start-Sleep -Seconds $retryDelayInSeconds
+                    }
+                    else {
+                        throw $errorRecord
+                    }
+                }
+            }
+            if ($response.properties.ResponseSummary.Succes -eq $false) {
+                throw $response.properties.ResponseSummary.Message
             }
             Write-Output $response
-        } catch {
+        }
+        catch {
             $PSCmdlet.ThrowTerminatingError($_)
         }
     }
 }
 
-function Resolve-Ultimo-UserError {
+function Resolve-UltimoUserError {
     [CmdletBinding()]
     param (
         [Parameter(Mandatory)]
@@ -67,105 +101,144 @@ function Resolve-Ultimo-UserError {
             FriendlyMessage  = $ErrorObject.Exception.Message
         }
         $webResponse = $false
-        try {
-            if ($ErrorObject.ErrorDetails) {
-                $httpErrorObj.ErrorDetails = $ErrorObject.ErrorDetails
-                $httpErrorObj.FriendlyMessage = $ErrorObject.ErrorDetails
+        if ($ErrorObject.ErrorDetails) {
+            $httpErrorObj.ErrorDetails = $ErrorObject.ErrorDetails
+            $httpErrorObj.FriendlyMessage = $ErrorObject.ErrorDetails
+            $webResponse = $true
+        }
+        elseif (-not [string]::IsNullOrWhiteSpace($ErrorObject.Exception.Data['ResponseBody'])) {
+            $httpErrorObj.ErrorDetails = $ErrorObject.Exception.Data['ResponseBody']
+            $httpErrorObj.FriendlyMessage = $ErrorObject.Exception.Data['ResponseBody']
+            $webResponse = $true
+        }
+        elseif ((-not($null -eq $ErrorObject.Exception.Response) -and $ErrorObject.Exception.GetType().FullName -eq 'System.Net.WebException')) {
+            $streamReaderResponse = [System.IO.StreamReader]::new($ErrorObject.Exception.Response.GetResponseStream()).ReadToEnd()
+            if (-not([string]::IsNullOrWhiteSpace($streamReaderResponse))) {
+                $httpErrorObj.ErrorDetails = $streamReaderResponse
+                $httpErrorObj.FriendlyMessage = $streamReaderResponse
                 $webResponse = $true
-            } elseif ((-not($null -eq $ErrorObject.Exception.Response) -and $ErrorObject.Exception.GetType().FullName -eq 'System.Net.WebException')) {
-                $streamReaderResponse = [System.IO.StreamReader]::new($ErrorObject.Exception.Response.GetResponseStream()).ReadToEnd()
-                if (-not([string]::IsNullOrWhiteSpace($streamReaderResponse))) {
-                    $httpErrorObj.ErrorDetails = $streamReaderResponse
-                    $httpErrorObj.FriendlyMessage = $streamReaderResponse
-                    $webResponse = $true
+            }
+        }
+        if ($webResponse) {
+            try {
+                $convertedErrorObject = ($httpErrorObj.FriendlyMessage | ConvertFrom-Json)
+                if (-not [string]::IsNullOrEmpty($convertedErrorObject.Message)) {
+                    $httpErrorObj.FriendlyMessage = $convertedErrorObject.Message
                 }
             }
-            if ($webResponse ) {
-                $responseObject = $httpErrorObj.ErrorDetails | ConvertFrom-Json
-                $httpErrorObj.FriendlyMessage = $responseObject.Message
+            catch {
+                Write-Warning "Unexpected web service response, Error during Json conversion: $($_.Exception.Message)"
             }
-        } catch {
-            $httpErrorObj.FriendlyMessage = "Received an unexpected response. The JSON could not be converted, error: [$($_.Exception.Message)]. Original error from web service: [$($ErrorObject.ErrorDetails)]"
         }
         Write-Output $httpErrorObj
     }
 }
-#endregion
+
+function Get-UltimoUser {
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory)]
+        [ValidateNotNullOrEmpty()]
+        [string]
+        $UserId
+    )
+    process {
+        try {
+            $splatParams = @{
+                Uri    = "$($actionContext.Configuration.BaseUrl)/api/v1/action/_ExternalAuthorizationManagement"
+                Method = 'POST'
+                Body   = (@{
+                        Action = 'GetUser'
+                        UserId = $UserId
+                    } | ConvertTo-Json)
+            }
+            Write-Output (Invoke-UltimoUserRestMethod @splatParams).properties.UserDetails
+        }
+        catch {
+            # Ultimo returns an error instead of an empty result when the user does not exist
+            if ($_.Exception.Message -eq "User $($UserId) not found.") {
+                Write-Output $null
+            }
+            else {
+                $PSCmdlet.ThrowTerminatingError($_)
+            }
+        }
+    }
+}
+#endregion functions
 
 try {
-    # Verify if [aRef] has a value
-    if ([string]::IsNullOrEmpty($($actionContext.References.Account))) {
+    $actionMessage = 'verifying account reference'
+    if ([string]::IsNullOrEmpty($actionContext.References.Account)) {
         throw 'The account reference could not be found'
     }
 
-    Write-Information "Verifying if a Ultimo-User account for [$($personContext.Person.DisplayName)] exists"
-    try {
-        $splatInvoke = @{
-            uri    = "$($actionContext.Configuration.BaseUrl)/api/v1/action/_ExternalAuthorizationManagement"
-            Method = 'POST'
-            Body   = ( @{
-                    Action = 'GetUser'
-                    UserId = $actionContext.References.Account
-                } | ConvertTo-Json)
-        }
-        $correlatedAccount = (Invoke-UltimoUserRestMethod @splatInvoke -Verbose:$false).properties.UserDetails
-    } catch {
-        if ($_.Exception.Message -ne "User $($actionContext.References.Account) not found.") {
-            throw $_
-        }
-    }
+    $actionMessage = "querying account with AccountReference: [$($actionContext.References.Account)]"
+    $correlatedAccount = Get-UltimoUser -UserId $actionContext.References.Account
 
+    $actionMessage = 'determining action'
     if ($null -ne $correlatedAccount) {
         $action = 'EnableAccount'
-        $dryRunMessage = "Enable Ultimo-User account: [$($actionContext.References.Account)] for person: [$($personContext.Person.DisplayName)] will be executed during enforcement"
-    } else {
+    }
+    else {
         $action = 'NotFound'
-        $dryRunMessage = "Ultimo-User account: [$($actionContext.References.Account)] for person: [$($personContext.Person.DisplayName)] could not be found, possibly indicating that it could be deleted, or the account is not correlated"
     }
-
-    # Add a message and the result of each of the validations showing what will happen during enforcement
-    if ($actionContext.DryRun -eq $true) {
-        Write-Information "[DryRun] $dryRunMessage"
-    }
+    Write-Information "Determined action: $($action)"
 
     # Process
-    if (-not($actionContext.DryRun -eq $true)) {
-        switch ($action) {
-            'EnableAccount' {
-                Write-Information "Enabling Ultimo-User account with accountReference: [$($actionContext.References.Account)]"
-                $splatInvoke['Body'] = @{
-                    Action          = 'UpdateUser'
-                    UserDescription = $correlatedAccount.Description
-                    UserId          = $actionContext.References.Account
-                    EnableAccount   = $true
-                } | ConvertTo-Json
-                $null = (Invoke-UltimoUserRestMethod @splatInvoke -Verbose:$false)
+    switch ($action) {
+        'EnableAccount' {
+            $actionMessage = "enabling account with AccountReference: [$($actionContext.References.Account)]"
 
-                $outputContext.Success = $true
+            $enableAccountSplatParams = @{
+                Uri    = "$($actionContext.Configuration.BaseUrl)/api/v1/action/_ExternalAuthorizationManagement"
+                Method = 'POST'
+                Body   = (@{
+                        Action          = 'UpdateUser'
+                        UserDescription = $correlatedAccount.Description
+                        UserId          = $actionContext.References.Account
+                        EnableAccount   = $true
+                    } | ConvertTo-Json)
+            }
+
+            if (-not($actionContext.DryRun -eq $true)) {
+                $null = Invoke-UltimoUserRestMethod @enableAccountSplatParams
+
                 $outputContext.AuditLogs.Add([PSCustomObject]@{
-                        Message = 'Enable account was successful'
+                        Action  = 'EnableAccount'
+                        Message = "Enabled account with AccountReference: [$($actionContext.References.Account)]"
                         IsError = $false
                     })
-                break
             }
+            else {
+                Write-Information "[DryRun] Would enable account with AccountReference: [$($actionContext.References.Account)]"
+            }
+            break
+        }
 
-            'NotFound' {
-                $outputContext.Success = $false
-                $outputContext.AuditLogs.Add([PSCustomObject]@{
-                        Message = "Ultimo-User account: [$($actionContext.References.Account)] for person: [$($personContext.Person.DisplayName)] could not be found, possibly indicating that it could be deleted"
-                        IsError = $true
-                    })
-                break
-            }
+        'NotFound' {
+            $actionMessage = "enabling account with AccountReference: [$($actionContext.References.Account)]"
+
+            $outputContext.AuditLogs.Add([PSCustomObject]@{
+                    Action  = 'EnableAccount'
+                    Message = "Account with AccountReference: [$($actionContext.References.Account)] for person [$($personContext.Person.DisplayName)] could not be found, possibly indicating that it could be deleted, or the account is not correlated"
+                    IsError = $true
+                })
+            break
         }
     }
-} catch {
-    $outputContext.success = $false
+
+    if (-not($outputContext.AuditLogs.IsError -contains $true)) {
+        $outputContext.Success = $true
+    }
+}
+catch {
+    $outputContext.Success = $false
     $ex = $PSItem
-    $errorObj = Resolve-Ultimo-UserError -ErrorObject $ex
+    $errorObj = Resolve-UltimoUserError -ErrorObject $ex
     Write-Warning "Error at Line '$($errorObj.ScriptLineNumber)': $($errorObj.Line). Error: $($errorObj.ErrorDetails)"
     $outputContext.AuditLogs.Add([PSCustomObject]@{
-            Message = "Could not enable Ultimo-User account. Error: $($errorObj.FriendlyMessage)"
+            Message = "Error $($actionMessage). Error: $($errorObj.FriendlyMessage)"
             IsError = $true
         })
 }

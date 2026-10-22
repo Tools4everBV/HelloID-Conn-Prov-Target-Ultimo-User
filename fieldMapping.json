@@ -3,13 +3,12 @@
   "MappingFields": [
     {
       "Name": "EmployeeId",
-      "Description": "",
+      "Description": "The Ultimo employee the user belongs to. Only used when creating the account, because it cannot be updated.",
       "Type": "Text",
       "MappingActions": [
         {
           "MapForActions": [
-            "Create",
-            "Update"
+            "Create"
           ],
           "MappingMode": "Field",
           "Value": "\"Person.ExternalId\"",
@@ -31,7 +30,7 @@
           "MappingMode": "Complex",
           "Value": "\"function getValue() {\\n    return Person.Accounts.MicrosoftActiveDirectory.sAMAccountName\\n}\\ngetValue();\"",
           "UsedInNotifications": false,
-          "StoreInAccountData": false
+          "StoreInAccountData": true
         }
       ]
     },
@@ -54,7 +53,7 @@
     },
     {
       "Name": "UserDescription",
-      "Description": "",
+      "Description": "The description of the user.",
       "Type": "Text",
       "MappingActions": [
         {
@@ -62,25 +61,24 @@
             "Create",
             "Update"
           ],
-          "MappingMode": "Field",
-          "Value": "\"Person.DisplayName\"",
+          "MappingMode": "Complex",
+          "Value": "\"// generateDisplayNameOption1.js [https://github.com/Tools4everBV/HelloID-Lib-Prov-HelperFunctions/blob/master/Javascript/Target/DisplayName/Scripts/generateDisplayNameOption1.js]\\r\\n//\\r\\n// Mapping logic to generate the DisplayName according to the following convention.\\r\\n// B\\tJanine van den Boele\\r\\n// BP\\tJanine van den Boele – de Vries\\r\\n// P\\tJanine de Vries\\r\\n// PB   Janine de Vries – van den Boele\\r\\nfunction generateDisplayName() {\\r\\n    let nickName = Person.Name.NickName;\\r\\n    let middleName = Person.Name.FamilyNamePrefix;\\r\\n    let lastName = Person.Name.FamilyName;\\r\\n    let middleNamePartner = Person.Name.FamilyNamePartnerPrefix;\\r\\n    let lastNamePartner = Person.Name.FamilyNamePartner;\\r\\n    let convention = Person.Name.Convention;\\r\\n\\r\\n    let displayName = '';\\r\\n    switch (convention) {\\r\\n        case \\\"BP\\\":\\r\\n            displayName = displayName + nickName + ' ';\\r\\n            if (typeof middleName !== 'undefined' && middleName) { displayName = displayName + middleName + ' ' }\\r\\n            displayName = displayName + lastName;\\r\\n\\r\\n            displayName = displayName + ' - ';\\r\\n            if (typeof middleNamePartner !== 'undefined' && middleNamePartner) { displayName = displayName + middleNamePartner + ' ' }\\r\\n            displayName = displayName + lastNamePartner;\\r\\n            break;\\r\\n        case \\\"PB\\\":\\r\\n            displayName = displayName + nickName + ' ';\\r\\n            if (typeof middleNamePartner !== 'undefined' && middleNamePartner) { displayName = displayName + middleNamePartner + ' ' }\\r\\n            displayName = displayName + lastNamePartner;\\r\\n\\r\\n            displayName = displayName + ' - ';\\r\\n            if (typeof middleName !== 'undefined' && middleName) { displayName = displayName + middleName + ' ' }\\r\\n            displayName = displayName + lastName;\\r\\n            break;\\r\\n        case \\\"P\\\":\\r\\n            displayName = displayName + nickName + ' ';\\r\\n            if (typeof middleNamePartner !== 'undefined' && middleNamePartner) { displayName = displayName + middleNamePartner + ' ' }\\r\\n            displayName = displayName + lastNamePartner;\\r\\n            break;\\r\\n        case \\\"B\\\":\\r\\n        default:\\r\\n            displayName = displayName + nickName + ' ';\\r\\n            if (typeof middleName !== 'undefined' && middleName) { displayName = displayName + middleName + ' ' }\\r\\n            displayName = displayName + lastName;\\r\\n            break;\\r\\n    }\\r\\n    // Trim spaces at start and end\\r\\n    displayName = displayName.trim();\\r\\n\\r\\n    // Shorten string to maxAttributeLength \\r\\n    const maxAttributeLength = 256;\\r\\n    displayName = displayName.substring(0, maxAttributeLength);\\r\\n\\r\\n    return displayName;\\r\\n}\\r\\n\\r\\ngenerateDisplayName();\"",
           "UsedInNotifications": false,
-          "StoreInAccountData": false
+          "StoreInAccountData": true
         }
       ]
     },
     {
       "Name": "GroupId",
-      "Description": "",
+      "Description": "The Ultimo Configuration Group. Mapped for Create by default. It can also be mapped for Update, but that replaces the configuration group of existing users and can cause them to lose rights, so only do this consciously, see the README. The example maps a title code to a Configuration Group, with a fallback for all other titles.",
       "Type": "Text",
       "MappingActions": [
         {
           "MapForActions": [
-            "Create",
-            "Update"
+            "Create"
           ],
-          "MappingMode": "Field",
-          "Value": "\"Person.PrimaryContract.Title.Code\"",
+          "MappingMode": "Complex",
+          "Value": "\"function getGroupId(titleCode) {\\r\\n    // Example mapping, replace with the title codes and Configuration Groups of the customer\\r\\n    const mapping = {\\r\\n        '*ALL': 'ESSENTIALS',\\r\\n        'MANA': 'BUILDING',\\r\\n        'SALES': 'BUILDING'\\r\\n    };\\r\\n\\r\\n    return mapping[titleCode] || mapping['*ALL'];\\r\\n}\\r\\n\\r\\ngetGroupId(Person.PrimaryContract.Title.Code);\"",
           "UsedInNotifications": false,
           "StoreInAccountData": false
         }

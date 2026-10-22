@@ -29,30 +29,64 @@ function Invoke-UltimoUserRestMethod {
     process {
         try {
             $headers = @{
-                APIKey               = $actionContext.Configuration.APIKey
+                APIKey               = $actionContext.Configuration.ApiKey
                 ApplicationElementId = $actionContext.Configuration.ApplicationElementId
             }
             $splatParams = @{
                 Uri         = $Uri
-                Headers     = $Headers
+                Headers     = $headers
                 Method      = $Method
                 ContentType = $ContentType
             }
             if ($Body) {
-                $splatParams['Body'] = $Body
+                $splatParams['Body'] = [System.Text.Encoding]::UTF8.GetBytes($Body)
             }
-            $response = Invoke-RestMethod @splatParams -Verbose:$false
-            if ( $response.properties.ResponseSummary.Succes -eq $false) {
-                throw  $response.properties.ResponseSummary.Message
+
+            # Ultimo allows a maximum of 100 requests per 10 seconds. When that limit is exceeded (HTTP 429), wait for the next window and retry.
+            # The daily quota is not retried, because waiting 10 seconds does not help. Only the message of the 10 seconds limit is known, so only that message is retried
+            $maxRetries = 3
+            $retryDelayInSeconds = 10
+            $retryCount = 0
+            while ($true) {
+                try {
+                    $response = Invoke-RestMethod @splatParams -Verbose:$false
+                    break
+                }
+                catch {
+                    $errorRecord = $_
+                    $statusCode = $null
+                    if ($null -ne $errorRecord.Exception.Response) {
+                        $statusCode = [int]$errorRecord.Exception.Response.StatusCode
+                    }
+                    $errorBody = "$($errorRecord.ErrorDetails)"
+                    if ([string]::IsNullOrEmpty($errorBody) -and $errorRecord.Exception.GetType().FullName -eq 'System.Net.WebException' -and $null -ne $errorRecord.Exception.Response) {
+                        # Windows PowerShell does not fill ErrorDetails. Read the response body once and keep it on the exception, so Resolve-UltimoUserError can still use it
+                        $errorBody = [System.IO.StreamReader]::new($errorRecord.Exception.Response.GetResponseStream()).ReadToEnd()
+                        $errorRecord.Exception.Data['ResponseBody'] = $errorBody
+                    }
+                    $isTooManyRequests = (($statusCode -eq 429) -or ($errorBody -match 'TooManyRequests')) -and ($errorBody -match '10 seconds')
+                    if ($isTooManyRequests -and $retryCount -lt $maxRetries) {
+                        $retryCount++
+                        Write-Warning "Ultimo API request limit reached (HTTP 429). Retry [$($retryCount)/$($maxRetries)] in [$($retryDelayInSeconds)] seconds"
+                        Start-Sleep -Seconds $retryDelayInSeconds
+                    }
+                    else {
+                        throw $errorRecord
+                    }
+                }
+            }
+            if ($response.properties.ResponseSummary.Succes -eq $false) {
+                throw $response.properties.ResponseSummary.Message
             }
             Write-Output $response
-        } catch {
+        }
+        catch {
             $PSCmdlet.ThrowTerminatingError($_)
         }
     }
 }
 
-function Resolve-Ultimo-UserError {
+function Resolve-UltimoUserError {
     [CmdletBinding()]
     param (
         [Parameter(Mandatory)]
@@ -67,160 +101,190 @@ function Resolve-Ultimo-UserError {
             FriendlyMessage  = $ErrorObject.Exception.Message
         }
         $webResponse = $false
-        try {
-            if ($ErrorObject.ErrorDetails) {
-                $httpErrorObj.ErrorDetails = $ErrorObject.ErrorDetails
-                $httpErrorObj.FriendlyMessage = $ErrorObject.ErrorDetails
+        if ($ErrorObject.ErrorDetails) {
+            $httpErrorObj.ErrorDetails = $ErrorObject.ErrorDetails
+            $httpErrorObj.FriendlyMessage = $ErrorObject.ErrorDetails
+            $webResponse = $true
+        }
+        elseif (-not [string]::IsNullOrWhiteSpace($ErrorObject.Exception.Data['ResponseBody'])) {
+            $httpErrorObj.ErrorDetails = $ErrorObject.Exception.Data['ResponseBody']
+            $httpErrorObj.FriendlyMessage = $ErrorObject.Exception.Data['ResponseBody']
+            $webResponse = $true
+        }
+        elseif ((-not($null -eq $ErrorObject.Exception.Response) -and $ErrorObject.Exception.GetType().FullName -eq 'System.Net.WebException')) {
+            $streamReaderResponse = [System.IO.StreamReader]::new($ErrorObject.Exception.Response.GetResponseStream()).ReadToEnd()
+            if (-not([string]::IsNullOrWhiteSpace($streamReaderResponse))) {
+                $httpErrorObj.ErrorDetails = $streamReaderResponse
+                $httpErrorObj.FriendlyMessage = $streamReaderResponse
                 $webResponse = $true
-            } elseif ((-not($null -eq $ErrorObject.Exception.Response) -and $ErrorObject.Exception.GetType().FullName -eq 'System.Net.WebException')) {
-                $streamReaderResponse = [System.IO.StreamReader]::new($ErrorObject.Exception.Response.GetResponseStream()).ReadToEnd()
-                if (-not([string]::IsNullOrWhiteSpace($streamReaderResponse))) {
-                    $httpErrorObj.ErrorDetails = $streamReaderResponse
-                    $httpErrorObj.FriendlyMessage = $streamReaderResponse
-                    $webResponse = $true
+            }
+        }
+        if ($webResponse) {
+            try {
+                $convertedErrorObject = ($httpErrorObj.FriendlyMessage | ConvertFrom-Json)
+                if (-not [string]::IsNullOrEmpty($convertedErrorObject.Message)) {
+                    $httpErrorObj.FriendlyMessage = $convertedErrorObject.Message
                 }
             }
-            if ($webResponse ) {
-                $responseObject = $httpErrorObj.ErrorDetails | ConvertFrom-Json
-                $httpErrorObj.FriendlyMessage = $responseObject.Message
+            catch {
+                Write-Warning "Unexpected web service response, Error during Json conversion: $($_.Exception.Message)"
             }
-        } catch {
-            $httpErrorObj.FriendlyMessage = "Received an unexpected response. The JSON could not be converted, error: [$($_.Exception.Message)]. Original error from web service: [$($ErrorObject.ErrorDetails)]"
         }
         Write-Output $httpErrorObj
     }
 }
-#endregion
+
+function Get-UltimoUser {
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory)]
+        [ValidateNotNullOrEmpty()]
+        [string]
+        $UserId
+    )
+    process {
+        try {
+            $splatParams = @{
+                Uri    = "$($actionContext.Configuration.BaseUrl)/api/v1/action/_ExternalAuthorizationManagement"
+                Method = 'POST'
+                Body   = (@{
+                        Action = 'GetUser'
+                        UserId = $UserId
+                    } | ConvertTo-Json)
+            }
+            Write-Output (Invoke-UltimoUserRestMethod @splatParams).properties.UserDetails
+        }
+        catch {
+            # Ultimo returns an error instead of an empty result when the user does not exist
+            if ($_.Exception.Message -eq "User $($UserId) not found.") {
+                Write-Output $null
+            }
+            else {
+                $PSCmdlet.ThrowTerminatingError($_)
+            }
+        }
+    }
+}
+#endregion functions
 
 try {
     # Initial Assignments
     $outputContext.AccountReference = 'Currently not available'
 
-    if ([string]::IsNullOrEmpty($($actionContext.Data.EmployeeId))) {
+    $actionMessage = 'validating mandatory fields'
+    if ([string]::IsNullOrEmpty($actionContext.Data.EmployeeId)) {
         throw 'Mandatory attribute [account.EmployeeId] is empty. Please make sure it is correctly mapped'
     }
-
-    Write-Information 'Use mapping to determine the desired Ultimo Configuration'
-    $mappingGrouped = (Import-Csv $actionContext.Configuration.mappingFilePath ) | Group-Object -Property HelloIdTitle -AsHashTable -AsString
-    if ($null -eq $mappingGrouped) {
-        throw 'Empty Mapping File, please check you mapping'
+    # Ultimo does not accept these characters in an Id that is used in the route of the API
+    if ($actionContext.Data.EmployeeId -match '[/<>*%&:\\?]') {
+        throw "Attribute [account.EmployeeId] with value [$($actionContext.Data.EmployeeId)] contains a character that Ultimo does not accept in an Id: / < > * % & : \ ?"
     }
-    $mappedUltimoConfigurationName = $mappingGrouped["$($actionContext.Data.GroupId)"].UltimoConfiguration
-    if ( $null -eq $mappedUltimoConfigurationName ) {
-        throw "No Ultimo Configuration found in the mapping with [$($actionContext.Data.GroupId)]"
+    if ([string]::IsNullOrEmpty($actionContext.Data.GroupId)) {
+        throw 'Mandatory attribute [account.GroupId] is empty. Please make sure it is correctly mapped to an existing Ultimo Configuration Group'
     }
 
-    Write-Information 'Validate if the Ultimo Employee Account exists.'
+    $actionMessage = "validating if Ultimo employee [$($actionContext.Data.EmployeeId)] exists"
     try {
-        $splatInvoke = @{
-            uri    = "$($actionContext.Configuration.BaseUrl)/api/v1/object/Employee('$($actionContext.Data.EmployeeId)')"
+        $getEmployeeSplatParams = @{
+            Uri    = "$($actionContext.Configuration.BaseUrl)/api/v1/object/Employee('$($actionContext.Data.EmployeeId)')"
             Method = 'GET'
         }
-        $null = Invoke-UltimoUserRestMethod @splatInvoke -Verbose:$false
-    } catch {
-        $_.Exception.Source = 'GetEmployee'
-        throw $_
+        $null = Invoke-UltimoUserRestMethod @getEmployeeSplatParams
+    }
+    catch {
+        $ex = $PSItem
+        $errorObj = Resolve-UltimoUserError -ErrorObject $ex
+        throw "Could not find Ultimo employee [$($actionContext.Data.EmployeeId)], $($errorObj.FriendlyMessage)"
     }
 
     # Validate correlation configuration
+    $actionMessage = 'validating correlation configuration'
     if ($actionContext.CorrelationConfiguration.Enabled) {
-        $correlationField = $actionContext.CorrelationConfiguration.accountField
-        $correlationValue = $actionContext.CorrelationConfiguration.personFieldValue
+        $correlationField = $actionContext.CorrelationConfiguration.AccountField
+        $correlationValue = $actionContext.CorrelationConfiguration.PersonFieldValue
 
-        if ([string]::IsNullOrEmpty($($correlationField))) {
+        if ([string]::IsNullOrEmpty($correlationField)) {
             throw 'Correlation is enabled but not configured correctly'
         }
-        if ([string]::IsNullOrEmpty($($correlationValue))) {
+        if ([string]::IsNullOrEmpty($correlationValue)) {
             throw 'Correlation is enabled but [accountFieldValue] is empty. Please make sure it is correctly mapped'
         }
 
-        # Verify if a user must be either [created ] or just [correlated]
-        Write-Information 'Validate if the Ultimo User Account already exists.'
-        try {
-            $splatInvoke = @{
-                uri    = "$($actionContext.Configuration.BaseUrl)/api/v1/action/_ExternalAuthorizationManagement"
-                Method = 'POST'
-                Body   = ( @{
-                        Action = 'GetUser'
-                        UserId = $correlationValue
-                    } | ConvertTo-Json)
-            }
-            $correlatedAccount = (Invoke-UltimoUserRestMethod @splatInvoke -Verbose:$false).properties.UserDetails
-        } catch {
-            if ($_.Exception.Message -ne "User $($actionContext.Data.UserId) not found.") {
-                throw $_
-            }
-        }
+        $actionMessage = "querying account where [$($correlationField)] = [$($correlationValue)]"
+        $correlatedAccount = Get-UltimoUser -UserId $correlationValue
     }
 
+    $actionMessage = 'determining action'
     if ($null -ne $correlatedAccount) {
         $action = 'CorrelateAccount'
-    } else {
+    }
+    else {
         $action = 'CreateAccount'
     }
-
-    # Add a message and the result of each of the validations showing what will happen during enforcement
-    if ($actionContext.DryRun -eq $true) {
-        Write-Information "[DryRun] $action Ultimo-User account for: [$($personContext.Person.DisplayName)], will be executed during enforcement"
-        Write-Information "Desired Ultimo ConfigurationName [$mappedUltimoConfigurationName], will be applied during enforcement"
-    }
+    Write-Information "Determined action: $($action)"
 
     # Process
-    if (-not($actionContext.DryRun -eq $true)) {
-        switch ($action) {
-            'CreateAccount' {
-                Write-Information 'Creating and correlating Ultimo-User account'
-                $actionContext.Data | Add-Member -NotePropertyMembers @{
-                    Action = 'CreateUser'
-                }
-                $actionContext.Data.GroupId = $mappedUltimoConfigurationName
+    switch ($action) {
+        'CreateAccount' {
+            $actionMessage = "creating account for person [$($personContext.Person.DisplayName)] with UserId [$($actionContext.Data.UserId)] and Configuration Group [$($actionContext.Data.GroupId)]"
 
-                $splatInvoke['Body'] = ($actionContext.Data | ConvertTo-Json)
-                $createdAccount = Invoke-UltimoUserRestMethod @splatInvoke -Verbose:$false
-
-
-                $outputContext.Data = $createdAccount
-                $outputContext.AccountReference = $createdAccount.Properties.UserDetails.id
-
-                $outputContext.AuditLogs.Add([PSCustomObject]@{
-                        Message = "Creating account was successful. AccountReference is: [$($outputContext.AccountReference)]"
-                        IsError = $false
-                    })
-
-                $outputContext.AuditLogs.Add([PSCustomObject]@{
-                        Message = "Set-Configuration for account was successful. Configuration is: [$mappedUltimoConfigurationName]"
-                        IsError = $false
-                    })
-
-                break
+            $createAccountBody = $actionContext.Data | Select-Object *
+            $createAccountBody | Add-Member -NotePropertyMembers @{ Action = 'CreateUser' } -Force
+            $createAccountSplatParams = @{
+                Uri    = "$($actionContext.Configuration.BaseUrl)/api/v1/action/_ExternalAuthorizationManagement"
+                Method = 'POST'
+                Body   = ($createAccountBody | ConvertTo-Json)
             }
-            'CorrelateAccount' {
-                Write-Information 'Correlating Ultimo-User account'
 
-                $outputContext.Data = $correlatedAccount
-                $outputContext.AccountReference = $correlatedAccount.id
-                $outputContext.AccountCorrelated = $true
+            if (-not($actionContext.DryRun -eq $true)) {
+                $createAccountResponse = Invoke-UltimoUserRestMethod @createAccountSplatParams
+
+                $outputContext.Data = $actionContext.Data
+                $outputContext.Data.UserId = $createAccountResponse.properties.UserDetails.id
+                $outputContext.AccountReference = $createAccountResponse.properties.UserDetails.id
+
                 $outputContext.AuditLogs.Add([PSCustomObject]@{
-                        Message = "Correlated account: [$($correlatedAccount.id)] on field: [$($correlationField)] with value: [$($correlationValue)]"
+                        Action  = 'CreateAccount'
+                        Message = "Created account with AccountReference: [$($outputContext.AccountReference)] and Configuration Group [$($actionContext.Data.GroupId)]"
                         IsError = $false
                     })
-                break
             }
+            else {
+                Write-Information "[DryRun] Would create account for person [$($personContext.Person.DisplayName)] with UserId [$($actionContext.Data.UserId)] and Configuration Group [$($actionContext.Data.GroupId)]"
+            }
+            break
+        }
+
+        'CorrelateAccount' {
+            $actionMessage = "correlating account on field [$($correlationField)] with value [$($correlationValue)]"
+
+            $outputContext.Data = [PSCustomObject]@{
+                UserId              = $correlatedAccount.id
+                ExternalAccountName = $correlatedAccount.ExternalAccountName
+                UserDescription     = $correlatedAccount.Description
+                GroupId             = $correlatedAccount.ConfigurationGroup.sgroname
+            }
+            $outputContext.AccountReference = $correlatedAccount.id
+            $outputContext.AccountCorrelated = $true
+
+            $outputContext.AuditLogs.Add([PSCustomObject]@{
+                    Action  = 'CorrelateAccount'
+                    Message = "Correlated account with AccountReference: [$($correlatedAccount.id)] on field [$($correlationField)] with value [$($correlationValue)]"
+                    IsError = $false
+                })
+            break
         }
     }
-    $outputContext.success = $true
-} catch {
-    $outputContext.success = $false
-    $ex = $PSItem
-    $errorObj = Resolve-Ultimo-UserError -ErrorObject $ex
-    $auditMessage = "Could not create or correlate Ultimo-User account. Error: $($errorObj.FriendlyMessage)"
-    Write-Warning "Error at Line '$($errorObj.ScriptLineNumber)': $($errorObj.Line). Error: $($errorObj.ErrorDetails)"
 
-    if ($_.Exception.Source -eq 'GetEmployee') {
-        $auditMessage = "Could not Create Ultimo-User account. Error: Could not find Employee account, $($errorObj.FriendlyMessage)"
-    }
+    $outputContext.Success = $true
+}
+catch {
+    $outputContext.Success = $false
+    $ex = $PSItem
+    $errorObj = Resolve-UltimoUserError -ErrorObject $ex
+    Write-Warning "Error at Line '$($errorObj.ScriptLineNumber)': $($errorObj.Line). Error: $($errorObj.ErrorDetails)"
     $outputContext.AuditLogs.Add([PSCustomObject]@{
-            Message = $auditMessage
+            Message = "Error $($actionMessage). Error: $($errorObj.FriendlyMessage)"
             IsError = $true
         })
 }
