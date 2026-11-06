@@ -178,7 +178,7 @@ try {
 
             Write-Output @{
                 PermissionReference = @{
-                    Id = "$($group.sgrousegroid)"
+                    Reference = "$($group.sgrousegroid)"
                 }
                 DisplayName         = "$($permissionsGrouped[[string]$group.sgrousegroid].GroupName)"
                 AccountReferences   = @("$($account.Id)")
