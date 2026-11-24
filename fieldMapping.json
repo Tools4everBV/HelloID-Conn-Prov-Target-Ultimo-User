@@ -35,7 +35,7 @@
     },
     {
       "Name": "ExternalAccountName",
-      "Description": "[Optional]\nThe name of the user for external authentication, for example the login name or UPN. Customer-specific: adjust Person.Accounts.MicrosoftActiveDirectory to the name of the customer's Active Directory target system.",
+      "Description": "[Optional]\nThe name of the user for external authentication. Defaults to the userPrincipalName. Customer-specific: adjust Person.Accounts.MicrosoftActiveDirectory to the name of the customer's Active Directory target system.",
       "Type": "Text",
       "MappingActions": [
         {
@@ -44,7 +44,7 @@
             "Update"
           ],
           "MappingMode": "Complex",
-          "Value": "\"function getValue() {\\r\\n    return Person.Accounts.MicrosoftActiveDirectory.sAMAccountName\\r\\n}\\r\\ngetValue();\"",
+          "Value": "\"function getValue() {\\r\\n    return Person.Accounts.MicrosoftActiveDirectory.userPrincipalName\\r\\n}\\r\\ngetValue();\"",
           "UsedInNotifications": false,
           "StoreInAccountData": false
         }
