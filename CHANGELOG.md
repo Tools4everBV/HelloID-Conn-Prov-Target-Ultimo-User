@@ -17,6 +17,8 @@ All notable changes to this project will be documented in this file. The format 
 - **BREAKING**: `GroupId` is mapped for _Create_ by default. It can also be mapped for _Update_, but that replaces the configuration group of existing users, which can cause them to lose rights. The README contains a warning
 - `EmployeeId` and `UserId` are mapped for _Create_ only, because they cannot be updated. `UserId` is now mapped to `Person.ExternalId` (was a `sAMAccountName` complex mapping), so a user created by HelloID is found again by the correlation on `Person.ExternalId`. Existing accounts are not affected, because the AccountReference comes from the Ultimo response. Re-import `fieldMapping.json` or adjust the mapping, and keep the previous mapping when existing implementations rely on it
 - Update compares case-sensitively, so a change that only affects casing is updated
+- `ExternalAccountName` is mapped to `Person.Accounts.MicrosoftActiveDirectory.userPrincipalName` by default (was `sAMAccountName`), the most used value for external authentication. It is mapped for Update too, so existing implementations that rely on the previous value should keep their own mapping, otherwise the next update changes it
+- `update.ps1` keeps `UserId` (from the AccountReference) in the account data, although it is not mapped for Update
 - A user that does not exist is recognized with a looser match on the Ultimo message (`User * not found*`)
 - `import.ps1` returns only the fields of the field mapping (`UserId`, `ExternalAccountName`, `UserDescription` and `GroupId`) as account data instead of the full Ultimo object
 - `fieldMapping.json` descriptions mark the mandatory fields and describe `UserId` and `ExternalAccountName`

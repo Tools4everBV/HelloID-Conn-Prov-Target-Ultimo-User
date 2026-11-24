@@ -304,7 +304,9 @@ try {
 
     if (-not($outputContext.AuditLogs.IsError -contains $true)) {
         $outputContext.Success = $true
-        $outputContext.Data = $actionContext.Data
+        # UserId is not mapped for Update, but it is part of the account data, so keep it by taking it from the AccountReference
+        $outputContext.Data = $actionContext.Data | Select-Object *
+        $outputContext.Data | Add-Member -NotePropertyMembers @{ UserId = $actionContext.References.Account } -Force
     }
 }
 catch {
