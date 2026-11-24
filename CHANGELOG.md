@@ -22,7 +22,7 @@ All notable changes to this project will be documented in this file. The format 
 - A user that does not exist is recognized with a looser match on the Ultimo message (`User * not found*`)
 - `import.ps1` returns only the fields of the field mapping (`UserId`, `ExternalAccountName`, `UserDescription` and `GroupId`) as account data instead of the full Ultimo object
 - `fieldMapping.json` descriptions mark the mandatory fields and describe `UserId` and `ExternalAccountName`
-- README: the Governance reconciliation resolutions are Disable and Revoke, Delete is not supported because a resolution has no person context. Added remarks on the correlation on `UserId`, the employee check before the correlation, the configuration group mapping (not through Business Rules) and upgrading from version 1.x
+- README: the Governance reconciliation resolutions are Enable, Disable and Revoke, Delete is not supported because a resolution has no person context. Added remarks on the correlation on `UserId`, the employee check before the correlation, the configuration group mapping (not through Business Rules) and upgrading from version 1.x
 - README: warning block, requirements split in API access, system and technical requirements (concurrent actions), and a link to the Ultimo API guide
 - `UserDescription` field mapping is a complex mapping that generates the display name from the name convention, instead of the HelloID display name
 - `UserId` and `UserDescription` are stored in the account data

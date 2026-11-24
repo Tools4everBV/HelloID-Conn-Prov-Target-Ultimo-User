@@ -70,7 +70,7 @@ The following features are available:
 | **Resources**                             | ❌         | -                                       |                                                                  |
 | **Entitlement Import: Accounts**          | ✅⚠️        | -                                       | An account counts as enabled when `ActivationDateTime` is filled. Soft-deleted accounts can optionally be filtered out, see [Archived accounts](#archived-accounts) |
 | **Entitlement Import: Permissions**       | ✅⚠️        | -                                       | Soft-deleted accounts can optionally be filtered out, see [Archived accounts](#archived-accounts) |
-| **Governance Reconciliation Resolutions** | ✅⚠️        | Disable, Revoke                         | Delete is not supported, see [Governance reconciliation resolutions](#governance-reconciliation-resolutions) |
+| **Governance Reconciliation Resolutions** | ✅⚠️        | Enable, Disable, Revoke                 | Delete is not supported, see [Governance reconciliation resolutions](#governance-reconciliation-resolutions) |
 
 Legend: ✅ supported, ✅⚠️ supported with limitations, ❌ not supported.
 
@@ -270,7 +270,7 @@ The connector manages two permission types:
 
 ### Governance reconciliation resolutions
 
-The connector supports the _Disable_ and _Revoke_ resolutions. These only need the account reference.
+The connector supports the _Enable_, _Disable_ and _Revoke_ resolutions. These only need the account reference.
 
 The _Delete_ resolution is not supported. _Delete_ is a soft-delete that updates the fields mapped for the _Delete_ action in the field mapping, see [Delete behavior](#delete-behavior). A reconciliation resolution has no person context, so those mapped values are not available and `delete.ps1` would report success without changing anything.
 
