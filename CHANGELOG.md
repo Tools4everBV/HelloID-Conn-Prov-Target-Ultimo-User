@@ -6,7 +6,6 @@ All notable changes to this project will be documented in this file. The format 
 
 ### Added
 - `delete.ps1`: Ultimo does not support deleting a user, so Delete is a soft-delete that updates the fields mapped for the _Delete_ action. No field is mapped for _Delete_ by default; the README describes an example, such as prefixing the `UserDescription`
-- Governance reconciliation resolution for Delete
 - Retry for requests that exceed the Ultimo limit of 100 requests per 10 seconds (HTTP 429): a maximum of 3 retries with a delay of 10 seconds. Other 429 responses, such as the daily quota, are not retried, and a README section on the API limits and quotas
 - `create.ps1` validates that the `EmployeeId` does not contain characters that Ultimo does not accept in an Id in the route of the API
 - Optional filter for soft-deleted accounts in `import.ps1` and `importPermissions.ps1` (commented out by default), see the README section _Archived accounts_
@@ -16,12 +15,14 @@ All notable changes to this project will be documented in this file. The format 
 - **BREAKING**: The configuration group is determined by the `GroupId` field mapping. Move the content of the CSV mapping file to the `GroupId` field mapping, see the example in `fieldMapping.json`
 - **BREAKING**: `GroupId` is mapped for _Create_ by default. It can also be mapped for _Update_, but that replaces the configuration group of existing users, which can cause them to lose rights. The README contains a warning
 - `EmployeeId` and `UserId` are mapped for _Create_ only, because they cannot be updated. `UserId` is now mapped to `Person.ExternalId` (was a `sAMAccountName` complex mapping), so a user created by HelloID is found again by the correlation on `Person.ExternalId`. Existing accounts are not affected, because the AccountReference comes from the Ultimo response. Re-import `fieldMapping.json` or adjust the mapping, and keep the previous mapping when existing implementations rely on it
+- `GroupId` defaults to the fixed configuration group `SELFSERV` for every user. A different group per function is possible with a custom JavaScript mapping, see the example in the README
 - Update compares case-sensitively, so a change that only affects casing is updated
 - `ExternalAccountName` is mapped to `Person.Accounts.MicrosoftActiveDirectory.userPrincipalName` by default (was `sAMAccountName`), the most used value for external authentication. It is mapped for Update too, so existing implementations that rely on the previous value should keep their own mapping, otherwise the next update changes it
 - `update.ps1` keeps `UserId` (from the AccountReference) in the account data, although it is not mapped for Update
 - A user that does not exist is recognized with a looser match on the Ultimo message (`User * not found*`)
 - `import.ps1` returns only the fields of the field mapping (`UserId`, `ExternalAccountName`, `UserDescription` and `GroupId`) as account data instead of the full Ultimo object
 - `fieldMapping.json` descriptions mark the mandatory fields and describe `UserId` and `ExternalAccountName`
+- README: the Governance reconciliation resolutions are Disable and Revoke, Delete is not supported because a resolution has no person context. Added remarks on the correlation on `UserId`, the employee check before the correlation, the configuration group mapping (not through Business Rules) and upgrading from version 1.x
 - README: warning block, requirements split in API access, system and technical requirements (concurrent actions), and a link to the Ultimo API guide
 - `UserDescription` field mapping is a complex mapping that generates the display name from the name convention, instead of the HelloID display name
 - `UserId` and `UserDescription` are stored in the account data

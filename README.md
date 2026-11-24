@@ -31,6 +31,7 @@
     - [Field mapping](#field-mapping)
     - [Account Reference](#account-reference)
   - [Remarks](#remarks)
+    - [Upgrading from version 1.x](#upgrading-from-version-1x)
     - [Execution order with Employee connector](#execution-order-with-employee-connector)
     - [Employee correlation behavior](#employee-correlation-behavior)
     - [EmployeeId cannot be updated](#employeeid-cannot-be-updated)
@@ -69,7 +70,7 @@ The following features are available:
 | **Resources**                             | ❌         | -                                       |                                                                  |
 | **Entitlement Import: Accounts**          | ✅⚠️        | -                                       | An account counts as enabled when `ActivationDateTime` is filled. Soft-deleted accounts can optionally be filtered out, see [Archived accounts](#archived-accounts) |
 | **Entitlement Import: Permissions**       | ✅⚠️        | -                                       | Soft-deleted accounts can optionally be filtered out, see [Archived accounts](#archived-accounts) |
-| **Governance Reconciliation Resolutions** | ✅         | Disable, Delete, Revoke                 | Delete is a soft-delete                                          |
+| **Governance Reconciliation Resolutions** | ✅⚠️        | Disable, Revoke                         | Delete is not supported, see [Governance reconciliation resolutions](#governance-reconciliation-resolutions) |
 
 Legend: ✅ supported, ✅⚠️ supported with limitations, ❌ not supported.
 
@@ -86,7 +87,7 @@ https://raw.githubusercontent.com/Tools4everBV/HelloID-Conn-Prov-Target-Ultimo-U
 ### Requirements
 
 **API access from Ultimo:**
-- Ultimo does not provide a standard interface for user management in all environments. This connector relies on a custom API interface provided by an Ultimo implementation partner.
+- Ultimo does not provide a standard interface for user management in all environments. This connector relies on a custom API interface provided by an Ultimo implementation partner, for example Meditain.
 - Assistance from an Ultimo consultant is required to enable and configure this custom interface. The consultant provides the `BaseUrl`, `ApplicationElementId` and `ApiKey`.
 
 **System requirements:**
@@ -118,6 +119,8 @@ The correlation configuration is used to specify which properties will be used t
 | Person correlation field  | `Person.ExternalId` |
 | Account correlation field | `UserId`            |
 
+Only `UserId` can be used as account correlation field. The connector looks up the correlation value with the Ultimo `GetUser` action, which takes a user id, so it cannot search on another field. The `UserId` field mapping (`Person.ExternalId` by default) must therefore match the person correlation field. A user that HelloID created itself is then found again on a later create.
+
 > [!TIP]
 > _For more information on correlation, please refer to our correlation [documentation](https://docs.helloid.com/en/provisioning/target-systems/powershell-v2-target-systems/correlation.html) pages_.
 
@@ -129,17 +132,25 @@ All customer-specific logic, such as the mapping of a title to a configuration g
 
 | Field                 | Actions        | Remarks                                                                                                                                                              |
 | --------------------- | -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `EmployeeId`          | Create         | The Ultimo employee the user belongs to. Not mapped for Update, see [EmployeeId cannot be updated](#employeeid-cannot-be-updated)                                   |
+| `EmployeeId`          | Create         | Mandatory. The Ultimo employee the user belongs to. Create stops when it is empty. Not mapped for Update, see [EmployeeId cannot be updated](#employeeid-cannot-be-updated)                                   |
 | `UserId`              | Create         | Mandatory. Stored in the account data. Used as correlation field. Mapped to `Person.ExternalId`, so it matches the correlation configuration. Not mapped for Update, because the Ultimo user Id cannot be changed |
 | `ExternalAccountName` | Create, Update | Optional. The name of the user for external authentication. The default mapping is the `userPrincipalName` of the `Person.Accounts.MicrosoftActiveDirectory` target system, adjust it per customer. Mapped for Update too, so changing the mapping changes the value for existing users at the next update          |
-| `UserDescription`     | Create, Update | Stored in the account data. Complex mapping that generates the display name. Optionally add a Delete mapping for the soft-delete, see [Delete behavior](#delete-behavior) |
-| `GroupId`             | Create         | The Ultimo configuration group. Mapped for Create by default. Mapping it for Update is possible, but carries a risk, see [Configuration group mapping](#configuration-group-mapping)                                    |
+| `UserDescription`     | Create, Update | Mandatory, it is required by the Ultimo `UpdateUser` action. Stored in the account data. Complex mapping that generates the display name. Optionally add a Delete mapping for the soft-delete, see [Delete behavior](#delete-behavior) |
+| `GroupId`             | Create         | Mandatory, Create stops when it is empty. The Ultimo configuration group. The default is the fixed value `SELFSERV` for every user. Mapped for Create by default. Mapping it for Update is possible, but carries a risk, see [Configuration group mapping](#configuration-group-mapping)                                    |
 
 ### Account Reference
 
 The account reference is populated with the Ultimo user property `id`.
 
 ## Remarks
+
+### Upgrading from version 1.x
+
+Version 2.0.0 contains breaking changes. Check the following before updating an existing implementation:
+
+- The CSV mapping file is replaced by the `GroupId` field mapping, see [Configuration group mapping](#configuration-group-mapping).
+- `UserId` is mapped to `Person.ExternalId` for Create only (it was `sAMAccountName`). Existing accounts keep their AccountReference.
+- `ExternalAccountName` is mapped to the `userPrincipalName` (it was `sAMAccountName`) and is also mapped for Update, so the next update changes the value for existing users. Keep the previous mapping when that is not wanted.
 
 ### Execution order with Employee connector
 
@@ -160,6 +171,8 @@ $getEmployeeSplatParams = @{
 }
 $null = Invoke-UltimoUserRestMethod @getEmployeeSplatParams
 ```
+
+The employee check runs before the correlation. When the employee does not exist, `create.ps1` stops, also when the Ultimo user already exists and would only have to be correlated. This is intentional: the Employee connector or another synchronization must have created the employee first, see [Execution order with Employee connector](#execution-order-with-employee-connector).
 
 If your implementation differs, follow the correlation method described in the [Employee Connector README](https://github.com/Tools4everBV/HelloID-Conn-Prov-Target-Ultimo-Employee#remarks).
 
@@ -194,7 +207,26 @@ The connector does not support using exactly the same name for both a configurat
 
 ### Configuration group mapping
 
-The `GroupId` field mapping determines the Ultimo configuration group of a new user. A configuration group is mandatory when creating a user. The default mapping is a complex mapping that maps the primary contract `Title.Code` to a configuration group, with the key `*ALL` as fallback for all other titles. Adjust the example in `fieldMapping.json` to the configuration groups of the customer.
+The `GroupId` field mapping determines the Ultimo configuration group of a new user. A configuration group is mandatory when creating a user. By default every user gets the same configuration group: the fixed value `SELFSERV`.
+
+The configuration group is part of the Ultimo user object, is sent with the `CreateUser` action and can occur only once per user. It is therefore set through the field mapping and not through Business Rules, which assign entitlements that can be granted multiple times.
+
+To assign a different configuration group per function, replace the fixed value with a custom JavaScript mapping. The example below maps the title code of the primary contract to a configuration group, with the key `*ALL` as fallback for all other titles. Replace the title codes and configuration groups with those of the customer.
+
+```javascript
+function getGroupId(titleCode) {
+    // Example mapping, replace with the title codes and Configuration Groups of the customer
+    const mapping = {
+        '*ALL': 'SELFSERV',
+        'MANA': 'BUILDING',
+        'SALES': 'BUILDING'
+    };
+
+    return mapping[titleCode] || mapping['*ALL'];
+}
+
+getGroupId(Person.PrimaryContract.Title.Code);
+```
 
 > [!WARNING]
 > **`GroupId` is mapped for _Create_ by default. It can also be mapped for _Update_, but do this consciously.**
@@ -202,7 +234,7 @@ The `GroupId` field mapping determines the Ultimo configuration group of a new u
 > The configuration group is the default group of an employee and determines the basic rights of the user in Ultimo. When `GroupId` is mapped for _Update_, the connector replaces the current configuration group of every existing user with the result of the mapping. This can have a large impact:
 >
 > - Users who were assigned a different configuration group in Ultimo, manually or by another process, lose that group and the rights that come with it.
-> - Users whose title does not occur in the mapping fall back to the `*ALL` group and can lose rights overnight, without any warning.
+> - With a custom mapping, users whose title does not occur in the mapping fall back to the `*ALL` group and can lose rights overnight, without any warning.
 > - A change in the source data, such as a new title code, immediately changes the rights of the affected users on the next update.
 >
 > Only map `GroupId` for _Update_ when the configuration group is fully managed by HelloID, the mapping is complete and it has been tested with a DryRun on the real data. If `GroupId` is not mapped for _Update_, the connector never changes the configuration group of an existing user.
@@ -233,12 +265,14 @@ getValue();
 
 The connector manages two permission types:
 
-- Configuration Groups are set in `create.ps1` through the `GroupId` field mapping, because a configuration group is mandatory when creating a new user account. `update.ps1` only changes the configuration group when `GroupId` is also mapped for Update, see the warning in [Configuration group mapping](#configuration-group-mapping). Only one configuration can be applied at a time.
+- Configuration Groups are set in `create.ps1` through the `GroupId` field mapping (by default the fixed value `SELFSERV`), because a configuration group is mandatory when creating a new user account. `update.ps1` only changes the configuration group when `GroupId` is also mapped for Update, see the warning in [Configuration group mapping](#configuration-group-mapping). Only one configuration can be applied at a time.
 - Authorization Groups are managed with entitlements (`permissions/groups` scripts). The configuration group of a user is not returned as a permission when importing permissions.
 
 ### Governance reconciliation resolutions
 
-The connector supports the _Disable_, _Delete_ and _Revoke_ resolutions. _Delete_ is a soft-delete, see [Delete behavior](#delete-behavior).
+The connector supports the _Disable_ and _Revoke_ resolutions. These only need the account reference.
+
+The _Delete_ resolution is not supported. _Delete_ is a soft-delete that updates the fields mapped for the _Delete_ action in the field mapping, see [Delete behavior](#delete-behavior). A reconciliation resolution has no person context, so those mapped values are not available and `delete.ps1` would report success without changing anything.
 
 ### API limits and quotas
 
@@ -293,7 +327,7 @@ The following endpoints are used by the connector.
 
 ### API documentation
 
-The general REST API guide of Ultimo is available at [developer.ultimo.net](https://developer.ultimo.net/api-guide/rest). The custom endpoint `_ExternalAuthorizationManagement` is not publicly documented.
+The general REST API guide of Ultimo is available at [developer.ultimo.net](https://developer.ultimo.net/api-guide/rest). The custom endpoint `_ExternalAuthorizationManagement` is not publicly documented. The custom interface and some behavior, such as auto-numbering and the use of the employee number as `Id`, can differ per Ultimo implementation. Ask the Ultimo implementation partner for the details of the environment.
 
 ### Script conventions
 
