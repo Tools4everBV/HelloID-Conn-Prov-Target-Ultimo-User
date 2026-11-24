@@ -7,6 +7,16 @@
   <img src="https://github.com/Tools4everBV/HelloID-Conn-Prov-Target-Ultimo-User/blob/main/Logo.png?raw=true">
 </p>
 
+> [!WARNING]
+> Keep the following in mind before implementing this connector:
+>
+> - The connector relies on a custom API interface provided by an Ultimo implementation partner, see [Requirements](#requirements)
+> - Set the concurrent actions of the target system in HelloID to `1`, see [API limits and quotas](#api-limits-and-quotas)
+> - Ultimo cannot delete a user, so Delete is a soft-delete, see [Delete behavior](#delete-behavior)
+> - `UserId`, `EmployeeId` and `GroupId` are mapped for Create only, see [Field mapping](#field-mapping)
+>
+> Read the [Remarks](#remarks) carefully and test in the Ultimo acceptance environment first.
+
 ## Table of contents
 
 - [HelloID-Conn-Prov-Target-Ultimo-User](#helloid-conn-prov-target-ultimo-user)
@@ -33,6 +43,7 @@
     - [Permission model](#permission-model)
     - [Governance reconciliation resolutions](#governance-reconciliation-resolutions)
     - [API limits and quotas](#api-limits-and-quotas)
+    - [Archived accounts](#archived-accounts)
     - [Ultimo retention period](#ultimo-retention-period)
   - [Development resources](#development-resources)
     - [API endpoints](#api-endpoints)
@@ -56,9 +67,11 @@ The following features are available:
 | **Account Lifecycle**                     | ✅         | Create, Update, Enable, Disable, Delete | Delete is a soft-delete, see [Delete behavior](#delete-behavior) |
 | **Permissions**                           | ✅         | Import, Grant, Revoke                   | Authorization Groups (entitlements)                              |
 | **Resources**                             | ❌         | -                                       |                                                                  |
-| **Entitlement Import: Accounts**          | ✅         | -                                       |                                                                  |
-| **Entitlement Import: Permissions**       | ✅         | -                                       |                                                                  |
+| **Entitlement Import: Accounts**          | ✅⚠️        | -                                       | An account counts as enabled when `ActivationDateTime` is filled. Soft-deleted accounts can optionally be filtered out, see [Archived accounts](#archived-accounts) |
+| **Entitlement Import: Permissions**       | ✅⚠️        | -                                       | Soft-deleted accounts can optionally be filtered out, see [Archived accounts](#archived-accounts) |
 | **Governance Reconciliation Resolutions** | ✅         | Disable, Delete, Revoke                 | Delete is a soft-delete                                          |
+
+Legend: ✅ supported, ✅⚠️ supported with limitations, ❌ not supported.
 
 ## Getting started
 
@@ -72,11 +85,18 @@ https://raw.githubusercontent.com/Tools4everBV/HelloID-Conn-Prov-Target-Ultimo-U
 
 ### Requirements
 
+**API access from Ultimo:**
 - Ultimo does not provide a standard interface for user management in all environments. This connector relies on a custom API interface provided by an Ultimo implementation partner.
-- Assistance from an Ultimo consultant is required to enable and configure this custom interface.
+- Assistance from an Ultimo consultant is required to enable and configure this custom interface. The consultant provides the `BaseUrl`, `ApplicationElementId` and `ApiKey`.
+
+**System requirements:**
 - The connector relies on the existence of an Ultimo employee. Employee creation can be managed using the [Employee Connector](https://github.com/Tools4everBV/HelloID-Conn-Prov-Target-Ultimo-Employee) or another synchronization method.
 - The Ultimo configuration group is determined in the field mapping (`GroupId`), see [Configuration group mapping](#configuration-group-mapping).
-- When the API key is configured for multiple Ultimo companies, Ultimo requires the `Ultimo-Company` header. The connector does not send this header, so use an API key that is configured for a single company.
+- The system user linked to the API key must use English, see [Language of Ultimo messages](#language-of-ultimo-messages).
+- Use an API key that is configured for a single Ultimo company. When the API key is configured for multiple companies, Ultimo requires the `Ultimo-Company` header, which the connector does not send.
+
+**Technical requirements:**
+- Set the concurrent actions of the target system in HelloID to `1`. The actions run in parallel by default, which makes it likely that the Ultimo limit of 100 requests per 10 seconds is exceeded, see [API limits and quotas](#api-limits-and-quotas).
 
 ### Connection settings
 
@@ -110,8 +130,8 @@ All customer-specific logic, such as the mapping of a title to a configuration g
 | Field                 | Actions        | Remarks                                                                                                                                                              |
 | --------------------- | -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `EmployeeId`          | Create         | The Ultimo employee the user belongs to. Not mapped for Update, see [EmployeeId cannot be updated](#employeeid-cannot-be-updated)                                   |
-| `UserId`              | Create, Update | Stored in the account data. Used as correlation field                                                                                                                |
-| `ExternalAccountName` | Create, Update |                                                                                                                                                                      |
+| `UserId`              | Create         | Mandatory. Stored in the account data. Used as correlation field. Mapped to `Person.ExternalId`, so it matches the correlation configuration. Not mapped for Update, because the Ultimo user Id cannot be changed |
+| `ExternalAccountName` | Create, Update | Optional. The name of the user for external authentication. The default mapping uses a `Person.Accounts` placeholder that must be adjusted per customer          |
 | `UserDescription`     | Create, Update | Stored in the account data. Complex mapping that generates the display name. Optionally add a Delete mapping for the soft-delete, see [Delete behavior](#delete-behavior) |
 | `GroupId`             | Create         | The Ultimo configuration group. Mapped for Create by default. Mapping it for Update is possible, but carries a risk, see [Configuration group mapping](#configuration-group-mapping)                                    |
 
@@ -153,11 +173,11 @@ The `EmployeeId` is used in the route of the Ultimo API (`Employee('{EmployeeId}
 
 ### Language of Ultimo messages
 
-The connector recognizes that a user does not exist by the English message `User {UserId} not found.` that Ultimo returns. Ultimo returns messages in the language of the system user linked to the API key (see the `Accept-Language` header in the [Ultimo documentation](https://developer.ultimo.net/api-guide/rest)). When that user uses another language, the connector can no longer recognize a missing user and reports an error instead. Make sure the system user of the API key uses English.
+The connector recognizes that a user does not exist by the English message `User {UserId} not found.` that Ultimo returns. Ultimo returns messages in the language of the system user linked to the API key (see the `Accept-Language` header in the [Ultimo documentation](https://developer.ultimo.net/api-guide/rest)). When that user uses another language, the connector can no longer recognize a missing user and reports an error instead. The message is matched loosely (`User * not found*`), so a small difference in the user id in the message does not matter. Make sure the system user of the API key uses English.
 
 ### Custom comparison object for update logic
 
-To determine whether a user should be updated, this connector uses a custom comparison object because the API request and response bodies differ. Only properties that are mapped for _Update_ are compared, and `null` and empty values are treated as equal.
+To determine whether a user should be updated, this connector uses a custom comparison object because the API request and response bodies differ. Only properties that are mapped for _Update_ are compared, and `null` and empty values are treated as equal. The comparison is case-sensitive, so a change that only affects casing (for example `jan de vries` to `Jan de Vries`) is also updated.
 
 When adding extra account properties, include them in this comparison object in `update.ps1`.
 
@@ -198,7 +218,8 @@ To make a deleted user recognizable in Ultimo, add a _Delete_ mapping to a field
 
 ```javascript
 function getValue() {
-    return 'uitdienst_' + Person.DisplayName;
+    // Use the same logic as the UserDescription mapping for Create and Update (the display name by name convention) and add the prefix
+    return 'uitdienst_' + generateDisplayName();
 }
 getValue();
 ```
@@ -240,6 +261,21 @@ When the limit per 10 seconds is exceeded, Ultimo returns HTTP 429 with the foll
 - **Concurrent actions:** set the number of concurrent actions of the target system in HelloID to `1`. A higher number makes it likely that the limit is exceeded, because the actions run in parallel and each retry counts as a request.
 - **Daily quota:** the quota of 10,000 requests per day cannot be increased. A create costs 3 requests, an update 1 to 3, enable, disable and delete 2 each, and grant and revoke 2 per permission. Spread an initial load of many users over multiple days or run it outside working hours. It is possible to set a daily quota per API key in Ultimo, so the connector, the Employee connector and other parties do not block each other.
 - **Payload too large:** HTTP 413 and 400 (batch size) are not retried, the request is reported as failed. The connector does not use batch requests.
+
+### Archived accounts
+
+A soft-deleted account stays in Ultimo, see [Delete behavior](#delete-behavior). `import.ps1` and `permissions/groups/importPermissions.ps1` contain a filter for soft-deleted accounts that is **commented out by default**. It checks whether the user description starts with `uitdienst_`.
+
+| Phase                                                 | Filter      | Why                                                                                                                                                         |
+| ----------------------------------------------------- | ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Initial implementation                                | Disabled    | Soft-deleted accounts are imported, so they can be correlated and put under management.                                                                     |
+| After go-live, when Governance Reconciliation is used | **Enabled** | HelloID treats soft-deleted accounts as deleted. Without the filter they are imported as accounts without an owner and keep returning in every report.     |
+
+To enable the filter, remove the comment characters from the lines below the comment `Optional: filter out soft-deleted accounts` in both scripts.
+
+> [!WARNING]
+> The filter only works when the _Delete_ mapping adds the prefix `uitdienst_` to the `UserDescription`. Adjust the prefix in both scripts when the _Delete_ mapping uses another value.
+
 ### Ultimo retention period
 
 Ultimo has a retention period for active and deactivated accounts. Normally, you cannot deactivate an account that was recently activated (typically 10 days). This cannot be solved in the connector itself, so account lifecycle rules should account for this cooldown period.
@@ -257,7 +293,7 @@ The following endpoints are used by the connector.
 
 ### API documentation
 
-Not available.
+The general REST API guide of Ultimo is available at [developer.ultimo.net](https://developer.ultimo.net/api-guide/rest). The custom endpoint `_ExternalAuthorizationManagement` is not publicly documented.
 
 ### Script conventions
 
