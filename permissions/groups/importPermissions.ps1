@@ -161,10 +161,19 @@ try {
     Write-Information "Queried authorization groups. Result count: $(($retrievedPermissions | Measure-Object).Count)"
 
     $permissionsGrouped = $retrievedPermissions | Group-Object -Property 'GroupId' -AsHashTable -AsString
+    # Group-Object returns $null when there are no authorization groups
+    if ($null -eq $permissionsGrouped) {
+        $permissionsGrouped = @{}
+    }
 
     $importedPermissions = 0
     foreach ($account in $existingAccounts) {
         $actionMessage = "processing authorization groups of account with AccountReference: [$($account.Id)]"
+
+        # Optional: filter out soft-deleted accounts, use the same filter as in import.ps1, see the README.
+        # if ($account.Description -like 'uitdienst_*') {
+        #     continue
+        # }
 
         foreach ($group in $account.AuthorizationGroups) {
             # The configuration group is also returned as authorization group, which is not a permission

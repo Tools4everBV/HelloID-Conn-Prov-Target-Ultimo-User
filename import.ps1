@@ -153,6 +153,12 @@ try {
     foreach ($account in $existingAccounts) {
         $actionMessage = "processing account with AccountReference: [$($account.Id)]"
 
+        # Optional: filter out soft-deleted accounts. Enable this after go-live when Governance Reconciliation is used, so deleted accounts no longer return in every report.
+        # Keep it disabled during the initial implementation, so these accounts can still be correlated. Adjust the prefix to the Delete mapping of the field mapping, see the README.
+        # if ($account.Description -like 'uitdienst_*') {
+        #     continue
+        # }
+
         # An account is enabled when it has an activation date
         $enabled = $false
         if ($account.PSObject.Properties.Name -contains 'ActivationDateTime' -and -not([string]::IsNullOrEmpty($account.ActivationDateTime))) {
@@ -169,18 +175,18 @@ try {
             $displayName = $account.Id
         }
 
-        # Add the properties as named in the field mapping
-        $account | Add-Member -NotePropertyMembers @{
-            UserId          = $account.Id
-            UserDescription = $account.Description
-        } -Force
-
         Write-Output @{
             AccountReference = $account.Id
             DisplayName      = $displayName
             UserName         = $userName
             Enabled          = $enabled
-            Data             = $account
+            # Only the fields as named in the field mapping
+            Data             = [PSCustomObject]@{
+                UserId              = $account.Id
+                ExternalAccountName = $account.ExternalAccountName
+                UserDescription     = $account.Description
+                GroupId             = $account.ConfigurationGroup.sgroname
+            }
         }
         $importedAccounts++
     }
