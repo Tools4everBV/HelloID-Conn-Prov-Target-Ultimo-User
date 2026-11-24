@@ -1,12 +1,12 @@
 [
     {
-        "key": "ApiKey",
+        "key": "BaseUrl",
         "type": "input",
         "defaultValue": "",
         "templateOptions": {
-            "type": "password",
-            "label": "ApiKey",
-            "description": "The ApiKey to connect to the API",
+            "label": "BaseUrl",
+            "description": "The URL to the Ultimo API, without a trailing slash.",
+            "placeholder": "https://MyUltimoEnvironment.ultimo.net",
             "required": true
         }
     },
@@ -17,29 +17,18 @@
         "templateOptions": {
             "type": "password",
             "label": "ApplicationElementId",
-            "description": "The ApplicationElementId to connect to the API",
+            "description": "The ApplicationElementId to connect to the Ultimo API. Required for all user-related actions. Provided by the Ultimo consultant.",
             "required": true
         }
     },
     {
-        "key": "BaseUrl",
+        "key": "ApiKey",
         "type": "input",
         "defaultValue": "",
         "templateOptions": {
-            "label": "BaseUrl",
-            "description": "The URL to the API.",
-            "placeholder": "https://MyUltimoEnvironment.ultimo.net",
-            "required": true
-        }
-    },
-    {
-        "key": "mappingFilePath",
-        "type": "input",
-        "defaultValue": "",
-        "templateOptions": {
-            "label": "mappingFilePath",
-            "description": "The mappingFilePath to the Configuration Mapping.",
-            "placeholder": "C:\\Ultimo\\ConfigurationMapping.csv",
+            "type": "password",
+            "label": "ApiKey",
+            "description": "The ApiKey to connect to the Ultimo API. Provided by the Ultimo consultant.",
             "required": true
         }
     }
