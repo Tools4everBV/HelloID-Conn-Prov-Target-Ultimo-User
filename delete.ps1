@@ -4,7 +4,6 @@
 # Note: Ultimo does not support deleting a user, so this is a soft-delete.
 #       The fields mapped for the Delete action in the field mapping are updated.
 #################################################
-$actionContext.DryRun = $false
 # Enable TLS1.2
 [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor [System.Net.SecurityProtocolType]::Tls12
 
