@@ -32,6 +32,7 @@
     - [Account Reference](#account-reference)
   - [Remarks](#remarks)
     - [Upgrading from version 1.x](#upgrading-from-version-1x)
+    - [Account status after create](#account-status-after-create)
     - [Execution order with Employee connector](#execution-order-with-employee-connector)
     - [Employee correlation behavior](#employee-correlation-behavior)
     - [EmployeeId cannot be updated](#employeeid-cannot-be-updated)
@@ -70,7 +71,7 @@ The following features are available:
 | **Resources**                             | ❌         | -                                       |                                                                  |
 | **Entitlement Import: Accounts**          | ✅⚠️        | -                                       | An account counts as enabled when `ActivationDateTime` is filled. Soft-deleted accounts can optionally be filtered out, see [Archived accounts](#archived-accounts) |
 | **Entitlement Import: Permissions**       | ✅⚠️        | -                                       | Soft-deleted accounts can optionally be filtered out, see [Archived accounts](#archived-accounts) |
-| **Governance Reconciliation Resolutions** | ✅⚠️        | Enable, Disable, Revoke                 | Delete is not supported, see [Governance reconciliation resolutions](#governance-reconciliation-resolutions) |
+| **Governance Reconciliation Resolutions** | ✅⚠️        | Disable                                 | Delete is not supported, see [Governance reconciliation resolutions](#governance-reconciliation-resolutions) |
 
 Legend: ✅ supported, ✅⚠️ supported with limitations, ❌ not supported.
 
@@ -151,6 +152,10 @@ Version 2.0.0 contains breaking changes. Check the following before updating an 
 - The CSV mapping file is replaced by the `GroupId` field mapping, see [Configuration group mapping](#configuration-group-mapping).
 - `UserId` is mapped to `Person.ExternalId` for Create only (it was `sAMAccountName`). Existing accounts keep their AccountReference.
 - `ExternalAccountName` is mapped to the `userPrincipalName` (it was `sAMAccountName`) and is also mapped for Update, so the next update changes the value for existing users. Keep the previous mapping when that is not wanted.
+
+### Account status after create
+
+A new user is created deactivated. The connector does not send an activation with the CreateUser action, so the account is activated with the _Enable_ action at the chosen moment.
 
 ### Execution order with Employee connector
 
@@ -270,7 +275,9 @@ The connector manages two permission types:
 
 ### Governance reconciliation resolutions
 
-The connector supports the _Enable_, _Disable_ and _Revoke_ resolutions. These only need the account reference.
+Governance reconciliation resolutions are only needed for the actions that cannot use the field mapping: _Disable_ and _Delete_. _Enable_ needs no resolution.
+
+The connector supports the _Disable_ resolution. It only needs the account reference.
 
 The _Delete_ resolution is not supported. _Delete_ is a soft-delete that updates the fields mapped for the _Delete_ action in the field mapping, see [Delete behavior](#delete-behavior). A reconciliation resolution has no person context, so those mapped values are not available and `delete.ps1` would report success without changing anything.
 
