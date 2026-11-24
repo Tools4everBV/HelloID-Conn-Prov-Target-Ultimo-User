@@ -69,15 +69,16 @@
     },
     {
       "Name": "GroupId",
-      "Description": "[Required]\nThe Ultimo Configuration Group. Create stops when it is empty. Mapped for Create by default. It can also be mapped for Update, but that replaces the configuration group of existing users and can cause them to lose rights, so only do this consciously, see the README. The example maps a title code to a Configuration Group, with a fallback for all other titles.",
+      "Description": "[Required]
+The Ultimo Configuration Group. Create stops when it is empty. The default is the fixed value SELFSERV for every user. Assigning a different group per function is possible with a custom JavaScript mapping, see the README (Configuration group mapping). Mapped for Create by default. It can also be mapped for Update, but that replaces the configuration group of existing users and can cause them to lose rights, so only do this consciously, see the README.",
       "Type": "Text",
       "MappingActions": [
         {
           "MapForActions": [
             "Create"
           ],
-          "MappingMode": "Complex",
-          "Value": "\"function getGroupId(titleCode) {\\r\\n    // Example mapping, replace with the title codes and Configuration Groups of the customer\\r\\n    const mapping = {\\r\\n        '*ALL': 'ESSENTIALS',\\r\\n        'MANA': 'BUILDING',\\r\\n        'SALES': 'BUILDING'\\r\\n    };\\r\\n\\r\\n    return mapping[titleCode] || mapping['*ALL'];\\r\\n}\\r\\n\\r\\ngetGroupId(Person.PrimaryContract.Title.Code);\"",
+          "MappingMode": "Fixed",
+          "Value": "\"SELFSERV\"",
           "UsedInNotifications": false,
           "StoreInAccountData": false
         }
