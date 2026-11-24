@@ -156,7 +156,7 @@ function Get-UltimoUser {
         }
         catch {
             # Ultimo returns an error instead of an empty result when the user does not exist
-            if ($_.Exception.Message -eq "User $($UserId) not found.") {
+            if ($_.Exception.Message -like "User * not found*") {
                 Write-Output $null
             }
             else {
@@ -192,15 +192,15 @@ try {
             GroupId             = $correlatedAccount.ConfigurationGroup.sgroname
         }
 
-        # Only compare the properties that are mapped, null and empty values are treated as equal
+        # Only compare the properties that are mapped, null and empty values are treated as equal. The comparison is case-sensitive, so a change in casing is also updated
         foreach ($property in $currentAccount.PSObject.Properties.Name) {
             if ($actionContext.Data.PSObject.Properties.Name -contains $property) {
-                if ("$($actionContext.Data.$property)" -ne "$($currentAccount.$property)") {
+                if ("$($actionContext.Data.$property)" -cne "$($currentAccount.$property)") {
                     $propertiesChanged += $property
                 }
             }
         }
-        if ($propertiesChanged.Count -gt 0) {
+        if (($propertiesChanged | Measure-Object).Count -gt 0) {
             $actionList += 'UpdateAccount'
         }
 
@@ -208,7 +208,7 @@ try {
             $actionList += 'UpdateConfiguration'
         }
 
-        if ($actionList.Count -eq 0) {
+        if (($actionList | Measure-Object).Count -eq 0) {
             $actionList += 'NoChanges'
         }
     }

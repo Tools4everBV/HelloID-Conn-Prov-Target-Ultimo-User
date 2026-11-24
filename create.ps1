@@ -156,7 +156,7 @@ function Get-UltimoUser {
         }
         catch {
             # Ultimo returns an error instead of an empty result when the user does not exist
-            if ($_.Exception.Message -eq "User $($UserId) not found.") {
+            if ($_.Exception.Message -like "User * not found*") {
                 Write-Output $null
             }
             else {
